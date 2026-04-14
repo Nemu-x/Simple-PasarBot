@@ -1,99 +1,13 @@
 <!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PasarBot Cabinet</title>
-  <style>
-    body{font-family:Inter,Arial,sans-serif;background:#0d1226;color:#e9edff;margin:0;padding:16px}
-    .card{background:#141b38;border:1px solid #2c386b;border-radius:12px;padding:12px;margin-bottom:12px}
-    h1,h2{margin:0 0 10px}
-    .muted{color:#9fb0e5}
-    pre{white-space:pre-wrap;word-break:break-word}
-  </style>
-</head>
-<body>
-  <h1>VPN Cabinet</h1>
-  <p class="muted" id="state">Loading...</p>
-  <div class="card"><h2>User</h2><pre id="user"></pre></div>
-  <div class="card"><h2>Subscription</h2><pre id="subscription"></pre></div>
-  <div class="card"><h2>Profile</h2><pre id="profile"></pre></div>
-  <div class="card"><h2>Payments</h2><pre id="payments"></pre></div>
-  <div class="card"><h2>Catalog</h2><pre id="catalog"></pre></div>
-  <div class="card">
-    <h2>Renew</h2>
-    <button data-profile="m1">Renew 1M</button>
-    <button data-profile="m3">Renew 3M</button>
-    <button data-profile="m6">Renew 6M</button>
-    <button data-profile="m12">Renew 12M</button>
-    <pre id="renew-out"></pre>
-  </div>
-  <div class="card">
-    <h2>Gift Subscription</h2>
-    <input id="gift-to" placeholder="Receiver Telegram ID">
-    <button id="gift-send">Send gift m1</button>
-    <pre id="gift-out"></pre>
-  </div>
-  <div class="card">
-    <h2>Guest Checkout</h2>
-    <button id="guest-checkout">Create guest order m1</button>
-    <pre id="guest-out"></pre>
-  </div>
-  <script>
-    let currentTelegramId = null;
-    async function load() {
-      const tg = window.Telegram && window.Telegram.WebApp;
-      const initData = tg?.initData || "";
-      const response = await fetch("/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ initData })
-      });
-      const payload = await response.json();
-      document.getElementById("state").textContent = response.ok ? "Ready" : "Failed to load";
-      document.getElementById("user").textContent = JSON.stringify(payload.user || null, null, 2);
-      document.getElementById("subscription").textContent = JSON.stringify(payload.subscription || null, null, 2);
-      document.getElementById("profile").textContent = JSON.stringify(payload.profile || null, null, 2);
-      document.getElementById("payments").textContent = JSON.stringify(payload.payments || [], null, 2);
-      currentTelegramId = payload.user?.telegramId || null;
-      const catalog = await fetch("/catalog").then((r) => r.json()).catch(() => ({}));
-      document.getElementById("catalog").textContent = JSON.stringify(catalog.profiles || [], null, 2);
-    }
-    document.querySelectorAll("button[data-profile]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!currentTelegramId) return;
-        const response = await fetch("/renew", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ telegramId: currentTelegramId, profileId: btn.dataset.profile })
-        });
-        const payload = await response.json();
-        document.getElementById("renew-out").textContent = JSON.stringify(payload, null, 2);
-        if (response.ok) {
-          await load();
-        }
-      });
-    });
-    document.getElementById("gift-send").addEventListener("click", async () => {
-      if (!currentTelegramId) return;
-      const to = document.getElementById("gift-to").value.trim();
-      const response = await fetch("/gifts/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromTelegramId: currentTelegramId, toTelegramId: to, profileId: "m1" })
-      });
-      document.getElementById("gift-out").textContent = JSON.stringify(await response.json(), null, 2);
-    });
-    document.getElementById("guest-checkout").addEventListener("click", async () => {
-      if (!currentTelegramId) return;
-      const response = await fetch("/landing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId: currentTelegramId, profileId: "m1", utm: { source: "miniapp" } })
-      });
-      document.getElementById("guest-out").textContent = JSON.stringify(await response.json(), null, 2);
-    });
-    load();
-  </script>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PasarBot Cabinet</title>
+    <script type="module" crossorigin src="./assets/index-BbLI4uMw.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CQ13R4EY.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>
