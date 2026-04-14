@@ -226,6 +226,90 @@ async function refreshAudit() {
 }
 $("#refresh-audit").onclick = refreshAudit;
 
+async function refreshPromos() {
+  const out = await getJson("admin/promos");
+  const tbody = $("#promos-table tbody");
+  tbody.innerHTML = "";
+  (out.data || []).forEach((p) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.code}</td><td>${p.kind}</td><td>${p.valueMinor ?? p.valueDays ?? "-"}</td><td>${p.usedCount}</td><td>${p.active}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+$("#refresh-promos").onclick = refreshPromos;
+$("#promo-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target).entries());
+  body.valueMinor = body.valueMinor ? Number(body.valueMinor) : null;
+  body.valueDays = body.valueDays ? Number(body.valueDays) : null;
+  body.maxUses = body.maxUses ? Number(body.maxUses) : null;
+  body.active = body.active === "true";
+  await postJson("admin/promos", body);
+  await refreshPromos();
+};
+
+async function refreshCampaigns() {
+  const out = await getJson("admin/campaigns");
+  const tbody = $("#campaigns-table tbody");
+  tbody.innerHTML = "";
+  (out.data || []).forEach((c) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${c.id}</td><td>${c.name}</td><td>${c.channel}</td><td>${c.active}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+$("#refresh-campaigns").onclick = refreshCampaigns;
+$("#campaign-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target).entries());
+  body.active = body.active === "true";
+  body.payload = JSON.parse(body.payload || "{}");
+  await postJson("admin/campaigns", body);
+  await refreshCampaigns();
+};
+$("#create-broadcast").onclick = async () => {
+  const out = await postJson("admin/broadcasts", { payload: { source: "admin-ui" } });
+  $("#broadcast-out").textContent = JSON.stringify(out, null, 2);
+};
+
+async function refreshPolicies() {
+  const out = await getJson("admin/channel-policies");
+  const tbody = $("#policies-table tbody");
+  tbody.innerHTML = "";
+  (out.data || []).forEach((p) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.code}</td><td>${JSON.stringify(p.payload)}</td><td>${p.active}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+$("#refresh-policies").onclick = refreshPolicies;
+$("#policy-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target).entries());
+  body.active = body.active === "true";
+  body.payload = JSON.parse(body.payload || "{}");
+  await postJson("admin/channel-policies", body);
+  await refreshPolicies();
+};
+
+async function refreshIncidents() {
+  const out = await getJson("admin/incidents?limit=100");
+  const tbody = $("#incidents-table tbody");
+  tbody.innerHTML = "";
+  (out.data || []).forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${row.createdAt}</td><td>${row.level}</td><td>${row.source}</td><td>${row.message}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+$("#refresh-incidents").onclick = refreshIncidents;
+
+async function refreshAnalytics() {
+  const out = await getJson("admin/analytics/summary");
+  $("#analytics-out").textContent = JSON.stringify(out, null, 2);
+}
+$("#refresh-analytics").onclick = refreshAnalytics;
+
 Promise.all([
   refreshDashboard(),
   refreshPlans(),
@@ -234,6 +318,11 @@ Promise.all([
   refreshUsers(),
   refreshSubs(),
   refreshAudit(),
+  refreshPromos(),
+  refreshCampaigns(),
+  refreshPolicies(),
+  refreshIncidents(),
+  refreshAnalytics(),
   refreshPasarSettings().then(() => refreshPasarTemplates()),
   refreshPasarStatus()
 ]);

@@ -21,6 +21,11 @@
     <button data-tab="users">Users</button>
     <button data-tab="subscriptions">Subscriptions</button>
     <button data-tab="audit">Audit</button>
+    <button data-tab="promos">Promos</button>
+    <button data-tab="campaigns">Campaigns</button>
+    <button data-tab="policies">Policies</button>
+    <button data-tab="incidents">Incidents</button>
+    <button data-tab="analytics">Analytics</button>
   </nav>
 
   <main>
@@ -116,6 +121,61 @@
       <h2>Audit Log</h2>
       <button id="refresh-audit">Refresh Audit</button>
       <table id="audit-table"><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-promos" class="tab">
+      <h2>Promos</h2>
+      <form id="promo-form" class="form-grid">
+        <label>Code<input name="code"></label>
+        <label>Kind<select name="kind"><option value="amount">amount</option><option value="days">days</option></select></label>
+        <label>Value Minor<input name="valueMinor" type="number"></label>
+        <label>Value Days<input name="valueDays" type="number"></label>
+        <label>Max Uses<input name="maxUses" type="number"></label>
+        <label>Active<select name="active"><option value="true">true</option><option value="false">false</option></select></label>
+        <button type="submit">Save Promo</button>
+      </form>
+      <button id="refresh-promos">Refresh Promos</button>
+      <table id="promos-table"><thead><tr><th>Code</th><th>Kind</th><th>Value</th><th>Used</th><th>Active</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-campaigns" class="tab">
+      <h2>Campaigns</h2>
+      <form id="campaign-form" class="form-grid">
+        <label>ID (optional)<input name="id"></label>
+        <label>Name<input name="name"></label>
+        <label>Channel<input name="channel" value="telegram"></label>
+        <label class="full">Payload JSON<textarea name="payload" rows="4">{}</textarea></label>
+        <label>Active<select name="active"><option value="true">true</option><option value="false">false</option></select></label>
+        <button type="submit">Save Campaign</button>
+      </form>
+      <button id="refresh-campaigns">Refresh Campaigns</button>
+      <button id="create-broadcast">Create Broadcast Job</button>
+      <table id="campaigns-table"><thead><tr><th>ID</th><th>Name</th><th>Channel</th><th>Active</th></tr></thead><tbody></tbody></table>
+      <pre id="broadcast-out"></pre>
+    </section>
+
+    <section id="tab-policies" class="tab">
+      <h2>Channel Policies</h2>
+      <form id="policy-form" class="form-grid">
+        <label>Code<input name="code" value="default"></label>
+        <label class="full">Payload JSON<textarea name="payload" rows="4">{}</textarea></label>
+        <label>Active<select name="active"><option value="true">true</option><option value="false">false</option></select></label>
+        <button type="submit">Save Policy</button>
+      </form>
+      <button id="refresh-policies">Refresh Policies</button>
+      <table id="policies-table"><thead><tr><th>Code</th><th>Payload</th><th>Active</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-incidents" class="tab">
+      <h2>Incidents</h2>
+      <button id="refresh-incidents">Refresh Incidents</button>
+      <table id="incidents-table"><thead><tr><th>When</th><th>Level</th><th>Source</th><th>Message</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-analytics" class="tab">
+      <h2>Analytics</h2>
+      <button id="refresh-analytics">Refresh Summary</button>
+      <pre id="analytics-out"></pre>
     </section>
   </main>
 
