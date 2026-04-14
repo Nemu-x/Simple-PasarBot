@@ -43,10 +43,15 @@
         <label>API key (optional)<input name="apiKey"></label>
         <label>WL template user<input name="wlTemplateUser" placeholder="WL-user"></label>
         <label>NO-WL template user<input name="noWlTemplateUser" placeholder="NO-WL-user"></label>
+        <label>WL template id<input name="wlTemplateId" placeholder="101"></label>
+        <label>NO-WL template id<input name="noWlTemplateId" placeholder="102"></label>
+        <label>Trial template id<input name="trialTemplateId" placeholder="100"></label>
         <label>WL inbounds (comma)<input name="wlInbounds" placeholder="wl-in-1,wl-in-2"></label>
         <label>NO-WL inbounds (comma)<input name="noWlInbounds" placeholder="nowl-in-1,nowl-in-2"></label>
         <button type="submit">Connect</button>
       </form>
+      <button id="refresh-pasar-templates">Load templates/users from panel</button>
+      <pre id="pasar-templates-out"></pre>
       <pre id="pasar-out"></pre>
     </section>
 

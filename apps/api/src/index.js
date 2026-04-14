@@ -23,7 +23,13 @@ import { canStartTrial, evaluateSubscription, shouldBlockForTraffic } from "@sim
 import { getBaseInfo, syncUser } from "@simple-pasarbot/pasarguard";
 import { buildPaymentRequest, createInvoice, verifyWebhookSignature } from "@simple-pasarbot/platega";
 import { normalizeLang, requestLang, t } from "./i18n.js";
-import { tryFetchApiKeyFromPanel } from "./pasarguard-panel.js";
+import {
+  createUserFromTemplate,
+  fetchAdminToken,
+  getUserTemplates,
+  getUsersSimple,
+  tryFetchApiKeyFromPanel
+} from "./pasarguard-panel.js";
 
 const app = express();
 
@@ -47,6 +53,19 @@ function normalizeTemplateKey(value) {
     return "wl";
   }
   return "no_wl";
+}
+
+function pickTemplateId(config, templateKey) {
+  if (config.trialTemplateId) {
+    return Number(config.trialTemplateId);
+  }
+  if (templateKey === "wl" && config.wlTemplateId) {
+    return Number(config.wlTemplateId);
+  }
+  if (templateKey === "no_wl" && config.noWlTemplateId) {
+    return Number(config.noWlTemplateId);
+  }
+  return null;
 }
 
 function parseInboundList(value) {
@@ -77,7 +96,13 @@ async function getPasarRuntimeConfig() {
     noWlTemplateUser: data.noWlTemplateUser || "",
     wlInbounds: parseInboundList(data.wlInbounds),
     noWlInbounds: parseInboundList(data.noWlInbounds),
-    subscriptionUrlPattern: data.subscriptionUrlPattern || ""
+    subscriptionUrlPattern: data.subscriptionUrlPattern || "",
+    panelUrl: data.panelUrl || "",
+    username: data.username || "",
+    password: data.password || "",
+    wlTemplateId: data.wlTemplateId || null,
+    noWlTemplateId: data.noWlTemplateId || null,
+    trialTemplateId: data.trialTemplateId || null
   };
 }
 
@@ -146,7 +171,7 @@ app.post("/trial/start", async (req, res) => {
   const pasarCfg = await getPasarRuntimeConfig();
   const templateKey = normalizeTemplateKey(nodeTemplate);
   const templateInbounds = templateKey === "wl" ? pasarCfg.wlInbounds : pasarCfg.noWlInbounds;
-  const generatedEmail = `${user.telegramId}-${templateKey}@pasar.local`;
+  const generatedEmail = `tg${user.telegramId}_${Date.now()}`;
   const generatedSubscriptionUrl = pasarCfg.subscriptionUrlPattern
     ? interpolateTemplate(pasarCfg.subscriptionUrlPattern, {
         email: generatedEmail,
@@ -171,7 +196,28 @@ app.post("/trial/start", async (req, res) => {
   };
 
   await markUserTrialUsed(user.id);
-  const saved = await upsertSubscription(subscription);
+  let saved = await upsertSubscription(subscription);
+
+  // Preferred flow: create user via PasarGuard panel template API and use returned subscription_url.
+  const selectedTemplateId = pickTemplateId(pasarCfg, templateKey);
+  if (pasarCfg.panelUrl && pasarCfg.username && pasarCfg.password && selectedTemplateId) {
+    try {
+      const panelToken = await fetchAdminToken(pasarCfg.panelUrl, pasarCfg.username, pasarCfg.password);
+      const created = await createUserFromTemplate(pasarCfg.panelUrl, panelToken, {
+        templateId: selectedTemplateId,
+        username: generatedEmail,
+        note: `telegram:${user.telegramId}`
+      });
+      if (created?.subscription_url) {
+        saved = await upsertSubscription({
+          ...saved,
+          subscriptionUrl: created.subscription_url
+        });
+      }
+    } catch (_error) {
+      // Keep fallback subscription URL if template creation failed.
+    }
+  }
 
   if (pasarCfg.nodeApiBaseUrl && pasarCfg.apiKey) {
     await syncUser(pasarCfg.nodeApiBaseUrl, pasarCfg.apiKey, {
@@ -313,6 +359,19 @@ app.get("/admin/pasarguard/settings", async (_req, res) => {
   return res.json({ data: saved?.value || null });
 });
 
+app.get("/admin/pasarguard/templates", async (_req, res) => {
+  const cfgRuntime = await getPasarRuntimeConfig();
+  if (!cfgRuntime.panelUrl || !cfgRuntime.username || !cfgRuntime.password) {
+    return res.status(400).json({ error: "panel credentials are not configured" });
+  }
+  const token = await fetchAdminToken(cfgRuntime.panelUrl, cfgRuntime.username, cfgRuntime.password);
+  const [templates, usersSimple] = await Promise.all([
+    getUserTemplates(cfgRuntime.panelUrl, token),
+    getUsersSimple(cfgRuntime.panelUrl, token)
+  ]);
+  return res.json({ templates, users: usersSimple?.users || [] });
+});
+
 app.post("/admin/pasarguard/connect", async (req, res) => {
   const lang = requestLang(req);
   const {
@@ -325,7 +384,10 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
     wlTemplateUser,
     noWlTemplateUser,
     wlInbounds,
-    noWlInbounds
+    noWlInbounds,
+    wlTemplateId,
+    noWlTemplateId,
+    trialTemplateId
   } = req.body;
 
   let apiKey = directApiKey || "";
@@ -346,11 +408,15 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
     nodeApiBaseUrl: nodeApiBaseUrl || null,
     subscriptionUrlPattern: subscriptionUrlPattern || null,
     username: username || null,
+    password: password || null,
     apiKey: apiKey || null,
     wlTemplateUser: wlTemplateUser || null,
     noWlTemplateUser: noWlTemplateUser || null,
     wlInbounds: wlInbounds || null,
     noWlInbounds: noWlInbounds || null,
+    wlTemplateId: wlTemplateId || null,
+    noWlTemplateId: noWlTemplateId || null,
+    trialTemplateId: trialTemplateId || null,
     autoDetected,
     detectedFrom
   };

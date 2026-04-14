@@ -47,13 +47,31 @@ async function refreshPasarSettings() {
   const out = await getJson("admin/pasarguard/settings");
   const form = $("#pasar-form");
   const data = out?.data || {};
-  ["panelUrl", "nodeApiBaseUrl", "subscriptionUrlPattern", "username", "wlTemplateUser", "noWlTemplateUser", "wlInbounds", "noWlInbounds"].forEach((key) => {
+  [
+    "panelUrl",
+    "nodeApiBaseUrl",
+    "subscriptionUrlPattern",
+    "username",
+    "wlTemplateUser",
+    "noWlTemplateUser",
+    "wlTemplateId",
+    "noWlTemplateId",
+    "trialTemplateId",
+    "wlInbounds",
+    "noWlInbounds"
+  ].forEach((key) => {
     if (form.elements[key]) {
       form.elements[key].value = data[key] || "";
     }
   });
   $("#pasar-out").textContent = JSON.stringify(out, null, 2);
 }
+
+async function refreshPasarTemplates() {
+  const out = await getJson("admin/pasarguard/templates");
+  $("#pasar-templates-out").textContent = JSON.stringify(out, null, 2);
+}
+$("#refresh-pasar-templates").onclick = refreshPasarTemplates;
 
 async function refreshPlans() {
   const out = await getJson("plans");
