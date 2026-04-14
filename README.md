@@ -22,6 +22,12 @@ MVP for Telegram VPN subscriptions with PasarGuard integration.
 4. Admin web:
    - `https://<your-domain>/admin/`
 
+Admin security env (recommended):
+- `ADMIN_WEB_PASSWORD_HASH` (bcrypt hash)
+- `ADMIN_SESSION_SECRET` (long random)
+- `ADMIN_SESSION_TTL_HOURS`
+- `ADMIN_SECURE_COOKIE=true`
+
 PostgreSQL migrations are applied automatically by API container startup (`npm run migrate`).
 
 ## TLS with Nginx + Certbot

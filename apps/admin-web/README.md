@@ -4,7 +4,13 @@ Available at `/admin/` behind Nginx.
 
 Current features:
 
-- Login via `ADMIN_WEB_USER` and `ADMIN_WEB_PASSWORD`
+- Secure admin sessions with:
+  - server-side session store
+  - signed session cookie
+  - TTL refresh
+  - IP/User-Agent fingerprint binding
+  - login rate limit
+- Login via `ADMIN_WEB_USER` + `ADMIN_WEB_PASSWORD_HASH` (recommended) or fallback `ADMIN_WEB_PASSWORD`
 - PasarGuard connect form (panel URL, credentials, optional direct API key)
 - Dashboard counters
 - Plans management (create/update/delete)
