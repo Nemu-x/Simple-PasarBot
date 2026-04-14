@@ -93,6 +93,21 @@ function interpolateTemplate(template, params) {
   return result;
 }
 
+function toAbsoluteSubscriptionUrl(rawUrl, panelUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) {
+    return "";
+  }
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+  const base = String(panelUrl || "").replace(/\/$/, "");
+  if (!base) {
+    return value;
+  }
+  return `${base}${value.startsWith("/") ? "" : "/"}${value}`;
+}
+
 async function getPasarRuntimeConfig() {
   const saved = await getIntegrationSetting("pasarguard");
   const data = saved?.value || {};
@@ -228,9 +243,10 @@ app.post("/trial/start", async (req, res) => {
         note: `telegram:${user.telegramId}`
       });
       if (created?.subscription_url) {
+        const absoluteSubUrl = toAbsoluteSubscriptionUrl(created.subscription_url, pasarCfg.panelUrl);
         saved = await upsertSubscription({
           ...saved,
-          subscriptionUrl: created.subscription_url,
+          subscriptionUrl: absoluteSubUrl || created.subscription_url,
           remoteUsername: created.username || generatedEmail
         });
       } else {
