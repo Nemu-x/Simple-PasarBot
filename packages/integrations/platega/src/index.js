@@ -16,7 +16,8 @@ export function buildPaymentRequest({ userId, planId, amount, callbackUrl }) {
 }
 
 export async function createInvoice(apiKey, payload) {
-  const response = await fetch("https://platega.io/api/payments", {
+  const baseUrl = process.env.PAYMENT_API_BASE_URL || "https://platega.io/api";
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/payments`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -25,7 +26,7 @@ export async function createInvoice(apiKey, payload) {
     body: JSON.stringify(payload)
   });
   if (!response.ok) {
-    throw new Error(`Platega create invoice failed with ${response.status}`);
+    throw new Error(`Payment provider create invoice failed with ${response.status}`);
   }
   return response.json();
 }

@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node -e \"console.log('admin-web placeholder')\"",
+    "dev": "node src/server.js",
     "build": "node -e \"console.log('admin-web build ok')\"",
     "lint": "node -e \"console.log('admin-web lint ok')\""
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2"
   }
 }

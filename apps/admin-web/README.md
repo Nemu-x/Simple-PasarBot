@@ -1,9 +1,11 @@
-# Admin Web MVP
+# Admin Web
 
-MVP admin panel requirements implemented by API endpoints:
+Available at `/admin/` behind Nginx.
 
-- `GET /admin/subscriptions`
-- `POST /admin/subscriptions/reconcile`
-- `GET /admin/pasarguard/info`
+Current features:
 
-This package is a placeholder for future UI (React or similar).
+- Login via `ADMIN_WEB_USER` and `ADMIN_WEB_PASSWORD`
+- PasarGuard connect form (panel URL, credentials, optional direct API key)
+- Plans management (create/update)
+- Instructions management (RU/EN + platform)
+- Subscription list view

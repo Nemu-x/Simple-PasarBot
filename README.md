@@ -19,6 +19,8 @@ MVP for Telegram VPN subscriptions with PasarGuard integration.
    - `docker compose -f deploy/docker-compose.yml up -d --build`
 3. API health:
    - `https://<your-domain>/health`
+4. Admin web:
+   - `https://<your-domain>/admin/`
 
 PostgreSQL migrations are applied automatically by API container startup (`npm run migrate`).
 
@@ -56,3 +58,5 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 - `POST /admin/plans`
 - `DELETE /admin/plans/:id`
 - `GET /admin/pasarguard/info`
+- `POST /admin/pasarguard/connect`
+- `GET /admin/pasarguard/settings`

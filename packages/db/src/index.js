@@ -198,3 +198,24 @@ export async function upsertInstruction({ code, lang, platform, title, body, ima
   );
   return result.rows[0];
 }
+
+export async function setIntegrationSetting(key, value) {
+  const result = await pool.query(
+    `INSERT INTO integration_settings (key, value_json)
+     VALUES ($1, $2::jsonb)
+     ON CONFLICT (key) DO UPDATE SET
+      value_json = EXCLUDED.value_json,
+      updated_at = NOW()
+     RETURNING key, value_json AS "value", updated_at AS "updatedAt"`,
+    [key, JSON.stringify(value)]
+  );
+  return result.rows[0];
+}
+
+export async function getIntegrationSetting(key) {
+  const result = await pool.query(
+    `SELECT key, value_json AS "value", updated_at AS "updatedAt" FROM integration_settings WHERE key = $1`,
+    [key]
+  );
+  return result.rows[0] || null;
+}

@@ -4,6 +4,7 @@ import {
   deletePlan,
   getOrCreateUser,
   getInstruction,
+  getIntegrationSetting,
   getPlan,
   getSubscriptionByUserId,
   healthCheck,
@@ -12,14 +13,16 @@ import {
   listSubscriptions,
   markUserTrialUsed,
   setUserPreferredLanguage,
+  setIntegrationSetting,
   upsertPlan,
   upsertInstruction,
   upsertSubscription
 } from "@simple-pasarbot/db";
 import { canStartTrial, evaluateSubscription, shouldBlockForTraffic } from "@simple-pasarbot/domain";
 import { getBaseInfo, syncUser } from "@simple-pasarbot/pasarguard";
-import { buildPaymentRequest, verifyWebhookSignature } from "@simple-pasarbot/platega";
+import { buildPaymentRequest, createInvoice, verifyWebhookSignature } from "@simple-pasarbot/platega";
 import { normalizeLang, requestLang, t } from "./i18n.js";
+import { tryFetchApiKeyFromPanel } from "./pasarguard-panel.js";
 
 const app = express();
 
@@ -29,7 +32,8 @@ const cfg = {
   pasarguardApiKey: process.env.PASARGUARD_API_KEY || "",
   webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || process.env.PLATEGA_WEBHOOK_SECRET || "dev-secret",
   appBaseUrl: process.env.APP_BASE_URL || "http://localhost:8080",
-  paymentProvider: process.env.PAYMENT_PROVIDER_NAME || "Payment"
+  paymentProvider: process.env.PAYMENT_PROVIDER_NAME || "Payment",
+  paymentApiKey: process.env.PAYMENT_API_KEY || process.env.PLATEGA_API_KEY || ""
 };
 
 function buildSubscriptionUrl(subscriptionId) {
@@ -159,7 +163,7 @@ app.post("/users/language", async (req, res) => {
   return res.json({ user: saved, message: t(saved?.preferredLanguage || "en", "languageUpdated") });
 });
 
-app.post("/payments/create", (req, res) => {
+app.post("/payments/create", async (req, res) => {
   const lang = requestLang(req);
   const { userId, planId, amount } = req.body;
   if (!userId) {
@@ -171,7 +175,11 @@ app.post("/payments/create", (req, res) => {
     amount,
     callbackUrl: `${cfg.appBaseUrl}/payments/webhook`
   });
-  res.json({ message: t(lang, "paymentPrepared"), provider: cfg.paymentProvider, payment: payload });
+  let invoice = null;
+  if (cfg.paymentApiKey) {
+    invoice = await createInvoice(cfg.paymentApiKey, payload).catch(() => null);
+  }
+  res.json({ message: t(lang, "paymentPrepared"), provider: cfg.paymentProvider, payment: payload, invoice });
 });
 
 app.get("/admin/subscriptions", async (_req, res) => {
@@ -240,6 +248,46 @@ app.get("/admin/pasarguard/info", async (_req, res) => {
   }
   const info = await getBaseInfo(cfg.pasarguardBaseUrl, cfg.pasarguardApiKey);
   return res.json({ info });
+});
+
+app.get("/admin/pasarguard/settings", async (_req, res) => {
+  const saved = await getIntegrationSetting("pasarguard");
+  return res.json({ data: saved?.value || null });
+});
+
+app.post("/admin/pasarguard/connect", async (req, res) => {
+  const lang = requestLang(req);
+  const {
+    panelUrl,
+    nodeApiBaseUrl,
+    username,
+    password,
+    apiKey: directApiKey
+  } = req.body;
+
+  let apiKey = directApiKey || "";
+  let autoDetected = false;
+  let detectedFrom = null;
+
+  if (!apiKey && panelUrl && username && password) {
+    const detection = await tryFetchApiKeyFromPanel(panelUrl, username, password);
+    if (detection.ok) {
+      apiKey = detection.apiKey;
+      autoDetected = true;
+      detectedFrom = detection.source;
+    }
+  }
+
+  const payload = {
+    panelUrl: panelUrl || null,
+    nodeApiBaseUrl: nodeApiBaseUrl || null,
+    username: username || null,
+    apiKey: apiKey || null,
+    autoDetected,
+    detectedFrom
+  };
+  await setIntegrationSetting("pasarguard", payload);
+  return res.json({ message: t(lang, "instructionSaved"), data: payload });
 });
 
 app.post("/admin/subscriptions/reconcile", async (req, res) => {
