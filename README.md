@@ -13,12 +13,22 @@ MVP for Telegram VPN subscriptions with PasarGuard integration.
    - `PASARGUARD_API_KEY`
    - `PLATEGA_API_KEY`
    - `PLATEGA_WEBHOOK_SECRET`
+   - `DOMAIN`
+   - `CERTBOT_EMAIL`
 2. Start stack:
    - `docker compose -f deploy/docker-compose.yml up -d --build`
 3. API health:
-   - `http://localhost:8080/health`
+   - `https://<your-domain>/health`
 
 PostgreSQL migrations are applied automatically by API container startup (`npm run migrate`).
+
+## TLS with Nginx + Certbot
+
+1. Start services:
+   - `docker compose -f deploy/docker-compose.yml up -d --build`
+2. Issue certificate once:
+   - `DOMAIN=your-domain.com CERTBOT_EMAIL=you@example.com sh deploy/scripts/init-letsencrypt.sh`
+3. Certbot container then renews certificates automatically every 12 hours.
 
 ## Current MVP scope
 

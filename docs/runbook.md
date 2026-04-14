@@ -32,12 +32,16 @@
 6. Put reverse proxy (Nginx/Caddy/Traefik) in front of `api:8080` and issue TLS cert.
 7. Configure Platega webhook URL to:
    - `https://<your-domain>/payments/webhook`
+8. For this repo (Nginx + Certbot):
+   - `docker compose -f deploy/docker-compose.yml up -d --build`
+   - `DOMAIN=<your-domain> CERTBOT_EMAIL=<email> sh deploy/scripts/init-letsencrypt.sh`
 
 ## PostgreSQL production notes
 
 - Use managed backups for volume `pgdata` (snapshot + SQL dump).
 - Never expose `5432` publicly in production; keep DB internal-only.
 - Migrations are idempotent through `schema_migrations`.
+- Certificates are auto-renewed by `certbot` service every 12h.
 
 ## Incident checks
 

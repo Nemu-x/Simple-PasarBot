@@ -5,8 +5,6 @@ services:
       dockerfile: deploy/images/api.Dockerfile
     env_file: ../.env
     command: sh -c "npm --prefix /app run migrate && npm run dev"
-    ports:
-      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -55,6 +53,29 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+
+  nginx:
+    image: nginx:1.27-alpine
+    env_file: ../.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      api:
+        condition: service_started
+
+  certbot:
+    image: certbot/certbot:latest
+    env_file: ../.env
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: /bin/sh -c
+    command: "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h; done"
 
 volumes:
   pgdata:
