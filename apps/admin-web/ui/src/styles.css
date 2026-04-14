@@ -1,0 +1,36 @@
+:root{
+  --bg:#070d23;
+  --panel:#101938;
+  --panel2:#131f45;
+  --text:#e8edff;
+  --muted:#a9b7e8;
+  --line:#273a7a;
+  --accent:#5d86ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 20% -20%,#182b64 0%,var(--bg) 48%);color:var(--text);font-family:Inter,system-ui,Arial,sans-serif}
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.sidebar{background:rgba(9,15,36,.82);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:8px}
+.brand{font-size:20px;font-weight:800;margin-bottom:12px}
+.tab{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:10px 12px;border-radius:10px;text-align:left;cursor:pointer}
+.tab.active{background:linear-gradient(180deg,var(--accent),#4267d8);border-color:#6b90ff}
+.logout{margin-top:auto;color:#c9d7ff;text-decoration:none}
+.content{padding:24px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(4,minmax(0,1fr))}
+.card{background:linear-gradient(180deg,var(--panel2),#101734);border:1px solid var(--line);border-radius:14px;padding:14px}
+.kpi p{margin:0;color:var(--muted)}
+.kpi h2{margin:4px 0 0;font-size:28px}
+.wide{grid-column:1/-1}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px;border-bottom:1px solid #1e2f66;font-size:14px;text-align:left}
+pre{white-space:pre-wrap;word-break:break-word;background:#0b1230;padding:10px;border-radius:10px;border:1px solid #203061;max-height:340px;overflow:auto}
+.primary{background:linear-gradient(180deg,#6790ff,#4f73e3);color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+.form{display:grid;gap:10px}
+input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2b3e7f;background:#0b1334;color:#fff}
+.row{display:flex;justify-content:space-between;align-items:center}
+@media (max-width: 1100px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:sticky;top:0;z-index:10}
+  .grid{grid-template-columns:1fr 1fr}
+}
