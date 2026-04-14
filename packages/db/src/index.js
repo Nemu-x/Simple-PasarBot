@@ -52,6 +52,15 @@ export async function setUserPreferredLanguage(telegramId, preferredLanguage) {
   return result.rows[0] || null;
 }
 
+export async function listUsers() {
+  const result = await pool.query(
+    `SELECT id, telegram_id AS "telegramId", has_used_trial AS "hasUsedTrial",
+      preferred_language AS "preferredLanguage", created_at AS "createdAt"
+     FROM users ORDER BY created_at DESC`
+  );
+  return result.rows;
+}
+
 export async function listPlans() {
   const result = await pool.query(
     "SELECT id, name, days, traffic_limit_bytes AS \"trafficLimitBytes\", is_trial AS \"isTrial\" FROM plans ORDER BY days ASC"

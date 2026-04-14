@@ -1,5 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -12,6 +14,9 @@ const cfg = {
   user: process.env.ADMIN_WEB_USER || "admin",
   pass: process.env.ADMIN_WEB_PASSWORD || "admin"
 };
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, "../public");
 
 function isAuthed(req) {
   return req.cookies?.admin_session === "ok";
@@ -57,7 +62,7 @@ app.get("/logout", (_req, res) => {
   res.redirect("/login");
 });
 
-app.use(authMiddleware);
+app.use("/api/proxy", authMiddleware);
 
 app.get("/api/proxy/*", async (req, res) => {
   const endpoint = req.params[0];
@@ -84,67 +89,10 @@ app.delete("/api/proxy/*", async (req, res) => {
   res.status(response.status).json(json);
 });
 
-app.get("/", (_req, res) => {
-  res.send(
-    pageShell(`
-<h1>Simple PasarBot Admin</h1>
-<p><a href="/logout">Logout</a></p>
-<section>
-  <h2>PasarGuard connect</h2>
-  <form id="pasar-form">
-    <label>Panel URL</label><input name="panelUrl" placeholder="https://panel.example.com" />
-    <label>Node API Base URL</label><input name="nodeApiBaseUrl" placeholder="https://node.example.com:8443" />
-    <label>Admin username</label><input name="username" />
-    <label>Admin password</label><input name="password" type="password" />
-    <label>API key (optional if auto-detect works)</label><input name="apiKey" />
-    <button type="submit">Connect</button>
-  </form>
-  <pre id="pasar-out"></pre>
-</section>
-<section>
-  <h2>Plans</h2>
-  <form id="plan-form">
-    <label>ID</label><input name="id" placeholder="trial / free / m1 / m3 / m6 / m12" />
-    <label>Name</label><input name="name" />
-    <label>Days</label><input name="days" type="number" />
-    <label>Traffic Limit Bytes</label><input name="trafficLimitBytes" type="number" />
-    <label>Is Trial</label><select name="isTrial"><option value="false">false</option><option value="true">true</option></select>
-    <button type="submit">Save plan</button>
-  </form>
-  <button id="load-plans">Refresh plans</button>
-  <pre id="plans-out"></pre>
-</section>
-<section>
-  <h2>Instructions</h2>
-  <form id="instr-form">
-    <label>Code</label><input name="code" value="connect_vpn" />
-    <label>Locale</label><select name="locale"><option value="ru">ru</option><option value="en">en</option></select>
-    <label>Platform</label><select name="platform"><option>universal</option><option>ios</option><option>android</option><option>mac</option><option>win</option></select>
-    <label>Title</label><input name="title" />
-    <label>Body</label><textarea name="body" rows="5"></textarea>
-    <label>Image URL</label><input name="imageUrl" />
-    <button type="submit">Save instruction</button>
-  </form>
-  <button id="load-instr">Refresh instructions</button>
-  <pre id="instr-out"></pre>
-</section>
-<section>
-  <h2>Subscriptions</h2>
-  <button id="load-subs">Refresh subscriptions</button>
-  <pre id="subs-out"></pre>
-</section>
-<script>
-async function postJson(path, body){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return r.json();}
-async function getJson(path){const r=await fetch(path);return r.json();}
-document.getElementById('pasar-form').onsubmit=async(e)=>{e.preventDefault();const f=new FormData(e.target);const body=Object.fromEntries(f.entries());const out=await postJson('/api/proxy/admin/pasarguard/connect',body);document.getElementById('pasar-out').textContent=JSON.stringify(out,null,2);}
-document.getElementById('plan-form').onsubmit=async(e)=>{e.preventDefault();const f=new FormData(e.target);const body=Object.fromEntries(f.entries());body.days=Number(body.days);body.trafficLimitBytes=body.trafficLimitBytes?Number(body.trafficLimitBytes):null;body.isTrial=body.isTrial==='true';const out=await postJson('/api/proxy/admin/plans',body);document.getElementById('plans-out').textContent=JSON.stringify(out,null,2);}
-document.getElementById('load-plans').onclick=async()=>{const out=await getJson('/api/proxy/plans');document.getElementById('plans-out').textContent=JSON.stringify(out,null,2);}
-document.getElementById('instr-form').onsubmit=async(e)=>{e.preventDefault();const f=new FormData(e.target);const out=await postJson('/api/proxy/admin/instructions',Object.fromEntries(f.entries()));document.getElementById('instr-out').textContent=JSON.stringify(out,null,2);}
-document.getElementById('load-instr').onclick=async()=>{const out=await getJson('/api/proxy/admin/instructions');document.getElementById('instr-out').textContent=JSON.stringify(out,null,2);}
-document.getElementById('load-subs').onclick=async()=>{const out=await getJson('/api/proxy/admin/subscriptions');document.getElementById('subs-out').textContent=JSON.stringify(out,null,2);}
-</script>
-`)
-  );
+app.use(authMiddleware, express.static(publicDir));
+
+app.get("/", authMiddleware, (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
 });
 
 app.listen(cfg.port, () => {

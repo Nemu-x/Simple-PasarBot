@@ -11,6 +11,7 @@ import {
   listInstructions,
   listPlans,
   listSubscriptions,
+  listUsers,
   markUserTrialUsed,
   setUserPreferredLanguage,
   setIntegrationSetting,
@@ -184,6 +185,10 @@ app.post("/payments/create", async (req, res) => {
 
 app.get("/admin/subscriptions", async (_req, res) => {
   res.json({ data: await listSubscriptions() });
+});
+
+app.get("/admin/users", async (_req, res) => {
+  res.json({ data: await listUsers() });
 });
 
 app.get("/admin/instructions", async (req, res) => {

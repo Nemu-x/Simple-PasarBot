@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple PasarBot Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Simple PasarBot Admin</h1>
+    <a href="/logout">Logout</a>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="pasarguard">PasarGuard</button>
+    <button data-tab="plans">Plans</button>
+    <button data-tab="instructions">Instructions</button>
+    <button data-tab="users">Users</button>
+    <button data-tab="subscriptions">Subscriptions</button>
+  </nav>
+
+  <main>
+    <section id="tab-dashboard" class="tab active">
+      <h2>Overview</h2>
+      <div class="cards">
+        <div class="card"><h3>Users</h3><p id="stat-users">-</p></div>
+        <div class="card"><h3>Subscriptions</h3><p id="stat-subs">-</p></div>
+        <div class="card"><h3>Plans</h3><p id="stat-plans">-</p></div>
+      </div>
+      <button id="refresh-dashboard">Refresh</button>
+    </section>
+
+    <section id="tab-pasarguard" class="tab">
+      <h2>PasarGuard Connection Wizard</h2>
+      <form id="pasar-form" class="form-grid">
+        <label>Panel URL<input name="panelUrl" placeholder="https://panel.example.com"></label>
+        <label>Node API Base URL<input name="nodeApiBaseUrl" placeholder="https://node.example.com:8443"></label>
+        <label>Admin username<input name="username"></label>
+        <label>Admin password<input name="password" type="password"></label>
+        <label>API key (optional)<input name="apiKey"></label>
+        <button type="submit">Connect</button>
+      </form>
+      <pre id="pasar-out"></pre>
+    </section>
+
+    <section id="tab-plans" class="tab">
+      <h2>Plans</h2>
+      <form id="plan-form" class="form-grid">
+        <label>ID<input name="id" placeholder="trial/free/m1/m3/m6/m12"></label>
+        <label>Name<input name="name"></label>
+        <label>Days<input name="days" type="number"></label>
+        <label>Traffic Limit Bytes<input name="trafficLimitBytes" type="number"></label>
+        <label>Is Trial<select name="isTrial"><option value="false">false</option><option value="true">true</option></select></label>
+        <button type="submit">Save Plan</button>
+      </form>
+      <button id="refresh-plans">Refresh Plans</button>
+      <table id="plans-table"><thead><tr><th>ID</th><th>Name</th><th>Days</th><th>Limit</th><th>Trial</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-instructions" class="tab">
+      <h2>Instructions</h2>
+      <form id="instr-form" class="form-grid">
+        <label>Code<input name="code" value="connect_vpn"></label>
+        <label>Locale<select name="locale"><option value="ru">ru</option><option value="en">en</option></select></label>
+        <label>Platform<select name="platform"><option>universal</option><option>ios</option><option>android</option><option>mac</option><option>win</option></select></label>
+        <label>Title<input name="title"></label>
+        <label class="full">Body<textarea name="body" rows="4"></textarea></label>
+        <label>Image URL<input name="imageUrl"></label>
+        <button type="submit">Save Instruction</button>
+      </form>
+      <button id="refresh-instr">Refresh Instructions</button>
+      <table id="instr-table"><thead><tr><th>Code</th><th>Lang</th><th>Platform</th><th>Title</th><th>Body</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-users" class="tab">
+      <h2>Users</h2>
+      <button id="refresh-users">Refresh Users</button>
+      <table id="users-table"><thead><tr><th>Telegram ID</th><th>Lang</th><th>Used Trial</th><th>Created</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-subscriptions" class="tab">
+      <h2>Subscriptions</h2>
+      <button id="refresh-subs">Refresh Subscriptions</button>
+      <table id="subs-table"><thead><tr><th>User</th><th>Plan</th><th>Status</th><th>Expires</th><th>URL</th></tr></thead><tbody></tbody></table>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
