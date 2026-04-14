@@ -2,21 +2,32 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 let pasarTemplates = [];
 let pasarSettings = {};
+let csrfToken = "";
+
+async function ensureCsrf() {
+  if (csrfToken) return csrfToken;
+  const r = await fetch("./api/csrf");
+  const json = await r.json();
+  csrfToken = json.csrfToken || "";
+  return csrfToken;
+}
 
 async function getJson(path) {
-  const r = await fetch(`/api/${path}`);
+  const r = await fetch(`./api/${path}`);
   return r.json();
 }
 async function postJson(path, body) {
-  const r = await fetch(`/api/${path}`, {
+  const token = await ensureCsrf();
+  const r = await fetch(`./api/${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
     body: JSON.stringify(body)
   });
   return r.json();
 }
 async function deleteJson(path) {
-  const r = await fetch(`/api/${path}`, { method: "DELETE" });
+  const token = await ensureCsrf();
+  const r = await fetch(`./api/${path}`, { method: "DELETE", headers: { "X-CSRF-Token": token } });
   return r.json();
 }
 
@@ -131,6 +142,31 @@ $("#plan-form").onsubmit = async (e) => {
   await refreshDashboard();
 };
 
+async function refreshProfiles() {
+  const out = await getJson("admin/profiles");
+  const tbody = $("#profiles-table tbody");
+  tbody.innerHTML = "";
+  (out.data || []).forEach((p) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.id}</td><td>${p.name}</td><td>${p.durationDays}</td><td>${p.priceMinor} ${p.currency}</td><td>${p.nodeTemplate}</td><td>${p.isTrial}</td><td>${p.requireChannelMember}</td><td>${p.active}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+$("#refresh-profiles").onclick = refreshProfiles;
+$("#profile-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target).entries());
+  body.durationDays = Number(body.durationDays);
+  body.priceMinor = Number(body.priceMinor || 0);
+  body.trafficLimitBytes = body.trafficLimitBytes ? Number(body.trafficLimitBytes) : null;
+  body.pasarTemplateId = body.pasarTemplateId ? Number(body.pasarTemplateId) : null;
+  body.isTrial = body.isTrial === "true";
+  body.requireChannelMember = body.requireChannelMember === "true";
+  body.active = body.active === "true";
+  await postJson("admin/profiles", body);
+  await refreshProfiles();
+};
+
 async function refreshInstructions() {
   const out = await getJson("admin/instructions");
   const tbody = $("#instr-table tbody");
@@ -178,12 +214,26 @@ async function refreshSubs() {
 }
 $("#refresh-subs").onclick = refreshSubs;
 
+async function refreshAudit() {
+  const out = await getJson("admin/audit?limit=100");
+  const tbody = $("#audit-table tbody");
+  tbody.innerHTML = "";
+  (out.data || []).forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${row.createdAt}</td><td>${row.actor}</td><td>${row.action}</td><td>${row.target}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+$("#refresh-audit").onclick = refreshAudit;
+
 Promise.all([
   refreshDashboard(),
   refreshPlans(),
+  refreshProfiles(),
   refreshInstructions(),
   refreshUsers(),
   refreshSubs(),
+  refreshAudit(),
   refreshPasarSettings().then(() => refreshPasarTemplates()),
   refreshPasarStatus()
 ]);

@@ -42,6 +42,17 @@ services:
       api:
         condition: service_started
 
+  miniapp:
+    build:
+      context: ..
+      dockerfile: deploy/images/miniapp.Dockerfile
+    env_file: ../.env
+    environment:
+      MINIAPP_PORT: 3200
+    depends_on:
+      api:
+        condition: service_started
+
   db:
     image: postgres:16
     environment:
@@ -50,8 +61,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -60,8 +69,6 @@ services:
 
   redis:
     image: redis:7
-    ports:
-      - "6379:6379"
 
   nginx:
     image: nginx:1.27-alpine
@@ -77,6 +84,8 @@ services:
       api:
         condition: service_started
       admin-web:
+        condition: service_started
+      miniapp:
         condition: service_started
 
   certbot:

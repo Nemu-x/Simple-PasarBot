@@ -1,22 +1,30 @@
 import express from "express";
+import crypto from "node:crypto";
 import QRCode from "qrcode";
 import {
+  createAuditLog,
+  createPaymentEvent,
   deletePlan,
   deleteSubscriptionByUserId,
   getOrCreateUser,
   getInstruction,
   getIntegrationSetting,
   getPlan,
+  getSubscriptionProfile,
   getSubscriptionByUserId,
   healthCheck,
+  listAuditLogs,
   listInstructions,
+  listPaymentEventsByUser,
   listPlans,
+  listSubscriptionProfiles,
   listSubscriptions,
   listUsers,
   markUserTrialUsed,
   markUserTrialUnused,
   setUserPreferredLanguage,
   setIntegrationSetting,
+  upsertSubscriptionProfile,
   upsertPlan,
   upsertInstruction,
   upsertSubscription
@@ -35,15 +43,20 @@ import {
 } from "./pasarguard-panel.js";
 
 const app = express();
+const channelCache = new Map();
+const requestBuckets = new Map();
 
 const cfg = {
   port: Number(process.env.API_PORT || 8080),
   pasarguardBaseUrl: process.env.PASARGUARD_BASE_URL || "",
   pasarguardApiKey: process.env.PASARGUARD_API_KEY || "",
-  webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || process.env.PLATEGA_WEBHOOK_SECRET || "dev-secret",
+  botToken: process.env.BOT_TOKEN || "",
+  telegramChannel: process.env.TELEGRAM_CHANNEL || "",
+  adminApiToken: process.env.ADMIN_API_TOKEN || "",
+  webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "dev-secret",
   appBaseUrl: process.env.APP_BASE_URL || "http://localhost:8080",
   paymentProvider: process.env.PAYMENT_PROVIDER_NAME || "Payment",
-  paymentApiKey: process.env.PAYMENT_API_KEY || process.env.PLATEGA_API_KEY || ""
+  paymentApiKey: process.env.PAYMENT_API_KEY || ""
 };
 
 function buildSubscriptionUrl(subscriptionId) {
@@ -145,6 +158,117 @@ async function instructionBundle(lang, subscriptionUrl, platform = "universal") 
   };
 }
 
+function normalizeNodeTemplate(value) {
+  const raw = String(value || "").toLowerCase();
+  if (raw === "wl" || raw === "whitelist") return "whitelist";
+  return "no-whitelist";
+}
+
+function parseTelegramInitData(rawInitData) {
+  const out = {};
+  const params = new URLSearchParams(String(rawInitData || ""));
+  for (const [key, value] of params.entries()) {
+    out[key] = value;
+  }
+  return out;
+}
+
+function verifyTelegramInitData(initDataRaw) {
+  const initData = String(initDataRaw || "");
+  if (!initData || !cfg.botToken) return false;
+  const params = new URLSearchParams(initData);
+  const hash = params.get("hash");
+  if (!hash) return false;
+  params.delete("hash");
+  const dataCheckString = [...params.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  const secretKey = crypto.createHmac("sha256", "WebAppData").update(cfg.botToken).digest();
+  const digest = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+  return digest === hash;
+}
+
+function checkRateLimit(req, keyPrefix, limit = 60, windowMs = 60_000) {
+  const id = `${keyPrefix}:${req.ip || req.socket.remoteAddress || "unknown"}`;
+  const now = Date.now();
+  const current = requestBuckets.get(id) || { count: 0, resetAt: now + windowMs };
+  if (current.resetAt <= now) {
+    current.count = 0;
+    current.resetAt = now + windowMs;
+  }
+  current.count += 1;
+  requestBuckets.set(id, current);
+  return current.count > limit;
+}
+
+async function checkChannelMembership(telegramId) {
+  if (!cfg.telegramChannel || !cfg.botToken) return true;
+  const key = `${telegramId}:${cfg.telegramChannel}`;
+  const cached = channelCache.get(key);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+  const endpoint = `https://api.telegram.org/bot${cfg.botToken}/getChatMember`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: cfg.telegramChannel, user_id: Number(telegramId) })
+  });
+  const payload = await response.json().catch(() => ({}));
+  const status = payload?.result?.status;
+  const ok = ["creator", "administrator", "member"].includes(String(status || ""));
+  channelCache.set(key, { value: ok, expiresAt: now + 2 * 60 * 1000 });
+  return ok;
+}
+
+async function createOrRenewSubscription({ user, profile, nodeTemplate, lang, platform }) {
+  const startsAt = new Date();
+  const existing = await getSubscriptionByUserId(user.id);
+  const baseStart = existing?.expiresAt && new Date(existing.expiresAt) > startsAt ? new Date(existing.expiresAt) : startsAt;
+  const expiresAt = new Date(baseStart.getTime() + profile.durationDays * 24 * 60 * 60 * 1000);
+  const passthroughNode = normalizeTemplateKey(nodeTemplate || profile.nodeTemplate || "no-whitelist");
+  const pasarCfg = await getPasarRuntimeConfig();
+  const generatedEmail = `tg${user.telegramId}_${Date.now()}`;
+  const generatedSubscriptionUrl = buildSubscriptionUrl(`${user.id}-${profile.id}`);
+  const subscription = {
+    id: existing?.id || `${user.id}-${profile.id}`,
+    userId: user.id,
+    planId: profile.id,
+    status: profile.isTrial ? "trial" : "active",
+    isTrial: Boolean(profile.isTrial),
+    blocked: false,
+    trafficUsedBytes: existing?.trafficUsedBytes || 0,
+    trafficLimitBytes: profile.trafficLimitBytes,
+    nodeId: passthroughNode,
+    subscriptionUrl: existing?.subscriptionUrl || generatedSubscriptionUrl,
+    startsAt: existing?.startsAt || startsAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    remoteUsername: existing?.remoteUsername || null
+  };
+
+  let saved = await upsertSubscription(subscription);
+  const selectedTemplateId = profile.pasarTemplateId || pickTemplateId(pasarCfg, passthroughNode);
+  if (isPasarConnected(pasarCfg) && selectedTemplateId) {
+    const panelToken = await fetchAdminToken(pasarCfg.panelUrl, pasarCfg.username, pasarCfg.password);
+    const created = await createUserFromTemplate(pasarCfg.panelUrl, panelToken, {
+      templateId: Number(selectedTemplateId),
+      username: generatedEmail,
+      note: `telegram:${user.telegramId}`
+    });
+    if (created?.subscription_url) {
+      saved = await upsertSubscription({
+        ...saved,
+        subscriptionUrl: toAbsoluteSubscriptionUrl(created.subscription_url, pasarCfg.panelUrl),
+        remoteUsername: created.username || generatedEmail
+      });
+    }
+  }
+  const bundle = await instructionBundle(lang, saved.subscriptionUrl, platform || "universal");
+  return { subscription: saved, instruction: bundle.instruction, qrDataUrl: bundle.qrDataUrl };
+}
+
 app.get("/health", (_req, res) => {
   healthCheck()
     .then(() => res.json({ ok: true }))
@@ -161,21 +285,68 @@ app.post("/payments/webhook", express.raw({ type: "*/*" }), async (req, res) => 
 
   const event = JSON.parse(rawBody);
   if (event.status === "paid") {
-    const sub = await getSubscriptionByUserId(event.userId);
+    const user = await getOrCreateUser(event.userId);
+    const sub = await getSubscriptionByUserId(user.id);
     if (sub) {
       sub.blocked = false;
       sub.status = "active";
-      sub.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const profile = (await getSubscriptionProfile(sub.planId)) || { durationDays: 30 };
+      sub.expiresAt = new Date(new Date(sub.expiresAt).getTime() + profile.durationDays * 24 * 60 * 60 * 1000).toISOString();
       await upsertSubscription(sub);
+      await createPaymentEvent({
+        userId: sub.userId,
+        subscriptionId: sub.id,
+        planId: sub.planId,
+        provider: cfg.paymentProvider,
+        status: "paid",
+        amountMinor: Number(event.amountMinor || 0),
+        currency: event.currency || "RUB",
+        externalId: event.externalId || null,
+        idempotencyKey: event.idempotencyKey || req.headers["x-idempotency-key"],
+        payload: event
+      });
     }
   }
   return res.json({ ok: true });
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "64kb" }));
+app.use((req, res, next) => {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  if (req.protocol === "https" || req.headers["x-forwarded-proto"] === "https") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+app.use((req, res, next) => {
+  if (checkRateLimit(req, "api", 240, 60_000)) {
+    return res.status(429).json({ error: "Too many requests" });
+  }
+  return next();
+});
+
+app.use("/admin", (req, res, next) => {
+  if (checkRateLimit(req, "admin-api", 120, 60_000)) {
+    return res.status(429).json({ error: "Too many admin requests" });
+  }
+  if (cfg.adminApiToken) {
+    const token = req.headers["x-admin-token"];
+    if (!token || token !== cfg.adminApiToken) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+  }
+  return next();
+});
 
 app.get("/plans", async (_req, res) => {
   res.json({ plans: await listPlans() });
+});
+
+app.get("/profiles", async (_req, res) => {
+  res.json({ profiles: await listSubscriptionProfiles() });
 });
 
 app.post("/trial/start", async (req, res) => {
@@ -184,7 +355,8 @@ app.post("/trial/start", async (req, res) => {
   if (!telegramId) {
     return res.status(400).json({ error: t(lang, "telegramRequired") });
   }
-  if (!channelMember) {
+  const isMember = channelMember && (await checkChannelMembership(telegramId));
+  if (!isMember) {
     return res.status(403).json({ error: t(lang, "channelRequired") });
   }
 
@@ -192,82 +364,21 @@ app.post("/trial/start", async (req, res) => {
   if (!canStartTrial(user)) {
     return res.status(409).json({ error: t(lang, "trialUsed") });
   }
-  const trial = await getPlan("trial");
-  if (!trial) {
+  const trialProfile = await getSubscriptionProfile("trial");
+  if (!trialProfile) {
     return res.status(500).json({ error: t(lang, "trialMissing") });
   }
-  const startsAt = new Date();
-  const expiresAt = new Date(startsAt.getTime() + trial.days * 24 * 60 * 60 * 1000);
-  const pasarCfg = await getPasarRuntimeConfig();
-  const templateKey = normalizeTemplateKey(nodeTemplate);
-  const templateInbounds = templateKey === "wl" ? pasarCfg.wlInbounds : pasarCfg.noWlInbounds;
-  const generatedEmail = `tg${user.telegramId}_${Date.now()}`;
-  const generatedSubscriptionUrl = pasarCfg.subscriptionUrlPattern
-    ? interpolateTemplate(pasarCfg.subscriptionUrlPattern, {
-        email: generatedEmail,
-        telegramId: user.telegramId,
-        template: templateKey
-      })
-    : buildSubscriptionUrl(`${user.id}-trial`);
-
-  const subscription = {
-    id: `${user.id}-trial`,
-    userId: user.id,
-    planId: trial.id,
-    status: "trial",
-    isTrial: true,
-    blocked: false,
-    trafficUsedBytes: 0,
-    trafficLimitBytes: trial.trafficLimitBytes,
-    nodeId: templateKey,
-    subscriptionUrl: generatedSubscriptionUrl,
-    startsAt: startsAt.toISOString(),
-    expiresAt: expiresAt.toISOString()
-  };
-
   await markUserTrialUsed(user.id);
-  let saved = await upsertSubscription(subscription);
-
-  // Preferred flow: create user via PasarGuard panel template API and use returned subscription_url.
-  const selectedTemplateId = pickTemplateId(pasarCfg, templateKey);
-  if (isPasarConnected(pasarCfg) && !selectedTemplateId) {
-    return res.status(400).json({ error: "PasarGuard template is not configured for trial flow" });
-  }
-
-  if (isPasarConnected(pasarCfg) && selectedTemplateId) {
-    try {
-      const panelToken = await fetchAdminToken(pasarCfg.panelUrl, pasarCfg.username, pasarCfg.password);
-      const created = await createUserFromTemplate(pasarCfg.panelUrl, panelToken, {
-        templateId: selectedTemplateId,
-        username: generatedEmail,
-        note: `telegram:${user.telegramId}`
-      });
-      if (created?.subscription_url) {
-        const absoluteSubUrl = toAbsoluteSubscriptionUrl(created.subscription_url, pasarCfg.panelUrl);
-        saved = await upsertSubscription({
-          ...saved,
-          subscriptionUrl: absoluteSubUrl || created.subscription_url,
-          remoteUsername: created.username || generatedEmail
-        });
-      } else {
-        return res.status(502).json({ error: "PasarGuard user created without subscription URL" });
-      }
-    } catch (error) {
-      return res.status(502).json({ error: `PasarGuard create failed: ${error.message}` });
-    }
-  }
-
-  if (pasarCfg.nodeApiBaseUrl && pasarCfg.apiKey) {
-    await syncUser(pasarCfg.nodeApiBaseUrl, pasarCfg.apiKey, {
-      email: generatedEmail,
-      inbounds: templateInbounds.length ? templateInbounds : [templateKey]
-    }).catch(() => undefined);
-  }
-
-  const bundle = await instructionBundle(lang, saved.subscriptionUrl, String(platform));
+  const bundle = await createOrRenewSubscription({
+    user,
+    profile: trialProfile,
+    nodeTemplate,
+    lang,
+    platform: String(platform)
+  });
   return res.json({
     message: t(lang, "trialStarted"),
-    subscription: saved,
+    subscription: bundle.subscription,
     instruction: bundle.instruction,
     qrDataUrl: bundle.qrDataUrl
   });
@@ -302,21 +413,103 @@ app.post("/users/language", async (req, res) => {
 
 app.post("/payments/create", async (req, res) => {
   const lang = requestLang(req);
-  const { userId, planId, amount } = req.body;
+  const { userId, planId, amount, idempotencyKey } = req.body;
   if (!userId) {
     return res.status(400).json({ error: t(lang, "userIdRequired") });
   }
+  const user = await getOrCreateUser(userId);
+  const profile = (await getSubscriptionProfile(planId || "m1")) || (await getSubscriptionProfile("m1"));
   const payload = buildPaymentRequest({
-    userId,
-    planId,
-    amount,
+    userId: String(user.telegramId),
+    planId: profile?.id || "m1",
+    amount: Number(amount || profile?.priceMinor || 0) / 100,
     callbackUrl: `${cfg.appBaseUrl}/payments/webhook`
   });
   let invoice = null;
   if (cfg.paymentApiKey) {
     invoice = await createInvoice(cfg.paymentApiKey, payload).catch(() => null);
   }
+  await createPaymentEvent({
+    userId: user.id,
+    planId: profile?.id || "m1",
+    provider: cfg.paymentProvider,
+    status: invoice ? "pending" : "prepared",
+    amountMinor: Number(amount || profile?.priceMinor || 0),
+    currency: profile?.currency || "RUB",
+    externalId: invoice?.id || null,
+    idempotencyKey: idempotencyKey || req.headers["x-idempotency-key"],
+    payload: { payload, invoice }
+  });
   res.json({ message: t(lang, "paymentPrepared"), provider: cfg.paymentProvider, payment: payload, invoice });
+});
+
+app.post("/subscriptions/create", async (req, res) => {
+  const lang = requestLang(req);
+  const { telegramId, profileId, nodeTemplate = "no-whitelist", platform = "universal" } = req.body;
+  if (!telegramId || !profileId) {
+    return res.status(400).json({ error: "telegramId and profileId are required" });
+  }
+  const profile = await getSubscriptionProfile(profileId);
+  if (!profile || !profile.active) {
+    return res.status(404).json({ error: "Profile not found" });
+  }
+  if (profile.requireChannelMember && !(await checkChannelMembership(telegramId))) {
+    return res.status(403).json({ error: t(lang, "channelRequired") });
+  }
+  const user = await getOrCreateUser(telegramId);
+  if (profile.isTrial && !canStartTrial(user)) {
+    return res.status(409).json({ error: t(lang, "trialUsed") });
+  }
+  if (profile.isTrial) {
+    await markUserTrialUsed(user.id);
+  }
+  const bundle = await createOrRenewSubscription({ user, profile, nodeTemplate, lang, platform });
+  return res.json({ ok: true, profile, ...bundle });
+});
+
+app.post("/subscriptions/renew", async (req, res) => {
+  const { telegramId, profileId } = req.body;
+  if (!telegramId || !profileId) {
+    return res.status(400).json({ error: "telegramId and profileId are required" });
+  }
+  const user = await getOrCreateUser(telegramId);
+  const profile = await getSubscriptionProfile(profileId);
+  if (!profile) {
+    return res.status(404).json({ error: "Profile not found" });
+  }
+  const bundle = await createOrRenewSubscription({ user, profile, nodeTemplate: profile.nodeTemplate, lang: requestLang(req), platform: "universal" });
+  return res.json({ ok: true, ...bundle });
+});
+
+app.post("/subscriptions/change-profile", async (req, res) => {
+  const { telegramId, profileId } = req.body;
+  if (!telegramId || !profileId) {
+    return res.status(400).json({ error: "telegramId and profileId are required" });
+  }
+  const user = await getOrCreateUser(telegramId);
+  const current = await getSubscriptionByUserId(user.id);
+  if (!current) {
+    return res.status(404).json({ error: "Subscription not found" });
+  }
+  const profile = await getSubscriptionProfile(profileId);
+  const next = await upsertSubscription({ ...current, planId: profile.id, trafficLimitBytes: profile.trafficLimitBytes, nodeId: profile.nodeTemplate });
+  return res.json({ ok: true, subscription: next });
+});
+
+app.post("/miniapp/session", async (req, res) => {
+  if (!verifyTelegramInitData(req.body?.initData)) {
+    return res.status(401).json({ error: "invalid initData signature" });
+  }
+  const data = parseTelegramInitData(req.body?.initData);
+  const userRaw = data.user ? JSON.parse(data.user) : null;
+  if (!userRaw?.id) {
+    return res.status(400).json({ error: "invalid initData" });
+  }
+  const user = await getOrCreateUser(String(userRaw.id));
+  const subscription = await getSubscriptionByUserId(user.id);
+  const profile = subscription?.planId ? await getSubscriptionProfile(subscription.planId) : null;
+  const payments = await listPaymentEventsByUser(user.id);
+  return res.json({ user, subscription, profile, payments });
 });
 
 app.get("/admin/subscriptions", async (_req, res) => {
@@ -325,6 +518,25 @@ app.get("/admin/subscriptions", async (_req, res) => {
 
 app.get("/admin/users", async (_req, res) => {
   res.json({ data: await listUsers() });
+});
+
+app.get("/admin/profiles", async (_req, res) => {
+  res.json({ data: await listSubscriptionProfiles() });
+});
+
+app.post("/admin/profiles", async (req, res) => {
+  const saved = await upsertSubscriptionProfile(req.body);
+  await createAuditLog({ actor: "admin", action: "profile.upsert", target: `profile:${saved.id}`, after: saved });
+  res.json({ profile: saved });
+});
+
+app.get("/admin/payments/:telegramId", async (req, res) => {
+  const user = await getOrCreateUser(String(req.params.telegramId));
+  res.json({ data: await listPaymentEventsByUser(user.id) });
+});
+
+app.get("/admin/audit", async (req, res) => {
+  res.json({ data: await listAuditLogs(Number(req.query.limit || 100)) });
 });
 
 app.get("/admin/instructions", async (req, res) => {
@@ -373,12 +585,15 @@ app.post("/admin/plans", async (req, res) => {
     trafficLimitBytes: trafficLimitBytes == null ? null : Number(trafficLimitBytes),
     isTrial: Boolean(isTrial)
   });
+  await createAuditLog({ actor: "admin", action: "plan.upsert", target: `plan:${plan.id}`, after: plan });
   return res.json({ message: t(lang, "planSaved"), plan });
 });
 
 app.delete("/admin/plans/:id", async (req, res) => {
   const lang = requestLang(req);
+  const before = await getPlan(req.params.id);
   await deletePlan(req.params.id);
+  await createAuditLog({ actor: "admin", action: "plan.delete", target: `plan:${req.params.id}`, before });
   return res.json({ message: t(lang, "planDeleted") });
 });
 
@@ -496,6 +711,7 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
     detectedFrom
   };
   await setIntegrationSetting("pasarguard", payload);
+  await createAuditLog({ actor: "admin", action: "pasarguard.connect", target: "integration:pasarguard", after: payload });
   return res.json({ message: t(lang, "instructionSaved"), data: payload });
 });
 
@@ -526,6 +742,7 @@ app.delete("/admin/subscriptions/:userId", async (req, res) => {
   }
   await deleteSubscriptionByUserId(userId);
   await markUserTrialUnused(userId);
+  await createAuditLog({ actor: "admin", action: "subscription.delete", target: `subscription:${userId}`, before: sub });
   return res.json({ ok: true });
 });
 

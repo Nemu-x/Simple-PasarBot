@@ -18,13 +18,15 @@ const cfg = {
   passwordHash: process.env.ADMIN_WEB_PASSWORD_HASH || "",
   sessionSecret: process.env.ADMIN_SESSION_SECRET || "",
   sessionTtlHours: Number(process.env.ADMIN_SESSION_TTL_HOURS || 12),
-  secureCookies: (process.env.ADMIN_SECURE_COOKIE || "true").toLowerCase() === "true"
+  secureCookies: (process.env.ADMIN_SECURE_COOKIE || "true").toLowerCase() === "true",
+  adminApiToken: process.env.ADMIN_API_TOKEN || ""
 };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "../public");
 const sessionStore = new Map();
 const loginAttempts = new Map();
+const csrfStore = new Map();
 
 function nowMs() {
   return Date.now();
@@ -135,12 +137,43 @@ function isAuthed(req) {
   return true;
 }
 
+function issueCsrfToken(sessionId) {
+  const token = crypto.randomBytes(24).toString("hex");
+  csrfStore.set(sessionId, { token, expiresAt: nowMs() + sessionTtlMs() });
+  return token;
+}
+
+function verifyCsrf(req) {
+  const parsed = parseSessionCookie(req.cookies?.admin_session);
+  if (!parsed) return false;
+  const data = csrfStore.get(parsed.id);
+  if (!data || data.expiresAt <= nowMs()) return false;
+  const headerToken = req.headers["x-csrf-token"];
+  return Boolean(headerToken && headerToken === data.token);
+}
+
 function authMiddleware(req, res, next) {
   if (!isAuthed(req)) {
+    if (req.path.startsWith("/api/") || req.path === "/api" || req.path === "/api/csrf") {
+      return res.status(401).json({ error: "unauthorized" });
+    }
     return res.redirect("login");
   }
   return next();
 }
+
+function secureHeaders(req, res, next) {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'");
+  if (req.protocol === "https" || req.headers["x-forwarded-proto"] === "https") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+}
+
+app.use(secureHeaders);
 
 function pageShell(content) {
   return `<!doctype html>
@@ -181,6 +214,10 @@ app.post("/login", (req, res) => {
       if (req.body.username === cfg.user && passwordOk) {
         const token = issueSession(req);
         clearAttempts(req);
+        const parsed = parseSessionCookie(token);
+        if (parsed) {
+          issueCsrfToken(parsed.id);
+        }
         res.cookie("admin_session", token, {
           httpOnly: true,
           sameSite: "strict",
@@ -202,34 +239,61 @@ app.get("/logout", (req, res) => {
   const parsed = parseSessionCookie(req.cookies?.admin_session);
   if (parsed) {
     sessionStore.delete(parsed.id);
+    csrfStore.delete(parsed.id);
   }
   res.clearCookie("admin_session");
   res.redirect("login");
 });
 
-app.use("/api/proxy", authMiddleware);
+app.get("/api/csrf", authMiddleware, (req, res) => {
+  const parsed = parseSessionCookie(req.cookies?.admin_session);
+  if (!parsed) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const token = issueCsrfToken(parsed.id);
+  return res.json({ csrfToken: token });
+});
 
-app.get("/api/proxy/*", async (req, res) => {
+app.use("/api", authMiddleware);
+app.post("/api/*", (req, res, next) => {
+  if (!verifyCsrf(req)) {
+    return res.status(403).json({ error: "csrf_failed" });
+  }
+  return next();
+});
+app.delete("/api/*", (req, res, next) => {
+  if (!verifyCsrf(req)) {
+    return res.status(403).json({ error: "csrf_failed" });
+  }
+  return next();
+});
+
+app.get("/api/*", async (req, res) => {
   const endpoint = req.params[0];
-  const response = await fetch(`${cfg.apiBase}/${endpoint}${req.url.includes("?") ? `?${req.url.split("?")[1]}` : ""}`);
+  const response = await fetch(`${cfg.apiBase}/${endpoint}${req.url.includes("?") ? `?${req.url.split("?")[1]}` : ""}`, {
+    headers: cfg.adminApiToken ? { "X-Admin-Token": cfg.adminApiToken } : {}
+  });
   const json = await response.json().catch(() => ({}));
   res.status(response.status).json(json);
 });
 
-app.post("/api/proxy/*", async (req, res) => {
+app.post("/api/*", async (req, res) => {
   const endpoint = req.params[0];
   const response = await fetch(`${cfg.apiBase}/${endpoint}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(cfg.adminApiToken ? { "X-Admin-Token": cfg.adminApiToken } : {}) },
     body: JSON.stringify(req.body)
   });
   const json = await response.json().catch(() => ({}));
   res.status(response.status).json(json);
 });
 
-app.delete("/api/proxy/*", async (req, res) => {
+app.delete("/api/*", async (req, res) => {
   const endpoint = req.params[0];
-  const response = await fetch(`${cfg.apiBase}/${endpoint}`, { method: "DELETE" });
+  const response = await fetch(`${cfg.apiBase}/${endpoint}`, {
+    method: "DELETE",
+    headers: cfg.adminApiToken ? { "X-Admin-Token": cfg.adminApiToken } : {}
+  });
   const json = await response.json().catch(() => ({}));
   res.status(response.status).json(json);
 });
