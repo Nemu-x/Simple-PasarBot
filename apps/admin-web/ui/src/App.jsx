@@ -34,6 +34,7 @@ export function App() {
     settings: {},
     pasarSettings: {}
   });
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     fetch("./api/csrf").then((r) => r.json()).then((j) => setCsrf(j.csrfToken || "")).catch(() => undefined);
@@ -63,6 +64,11 @@ export function App() {
       pasarStatus: pasarStatus.data,
       pasarSettings: pasarSettings.data?.data || {}
     }));
+  }
+
+  function notify(text) {
+    setToast(text);
+    setTimeout(() => setToast(""), 2200);
   }
 
   useEffect(() => {
@@ -123,6 +129,7 @@ export function App() {
     });
     e.currentTarget.reset();
     await refreshAll();
+    notify("Промокод сохранен");
   }
 
   async function deleteSubscription(userId) {
@@ -131,6 +138,7 @@ export function App() {
       headers: { "X-CSRF-Token": csrf }
     });
     await refreshAll();
+    notify("Подписка удалена");
   }
 
   async function saveProfile(e) {
@@ -155,6 +163,7 @@ export function App() {
     });
     e.currentTarget.reset();
     await refreshAll();
+    notify("Профиль сохранен");
   }
 
   async function saveInstruction(e) {
@@ -173,6 +182,7 @@ export function App() {
       body: JSON.stringify(body)
     });
     await refreshAll();
+    notify("Инструкция сохранена");
   }
 
   async function connectPasar(e) {
@@ -193,6 +203,52 @@ export function App() {
       body: JSON.stringify(body)
     });
     await refreshAll();
+    notify("Подключение сохранено");
+  }
+
+  async function deleteInstruction(id) {
+    await api(`admin/instructions/${id}`, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrf }
+    });
+    await refreshAll();
+    notify("Инструкция удалена");
+  }
+
+  async function deletePromo(code) {
+    await api(`admin/promos/${encodeURIComponent(code)}`, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrf }
+    });
+    await refreshAll();
+    notify("Промокод удален");
+  }
+
+  async function createCampaign(e) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await api("admin/campaigns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({
+        id: String(fd.get("id") || "").trim() || undefined,
+        name: String(fd.get("name") || "").trim(),
+        channel: String(fd.get("channel") || "telegram"),
+        payload: {}
+      })
+    });
+    e.currentTarget.reset();
+    await refreshAll();
+    notify("Кампания сохранена");
+  }
+
+  async function deleteCampaignById(id) {
+    await api(`admin/campaigns/${id}`, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrf }
+    });
+    await refreshAll();
+    notify("Кампания удалена");
   }
 
   return (
@@ -211,6 +267,7 @@ export function App() {
       </aside>
 
       <main className="content">
+        {toast ? <div className="toast">{toast}</div> : null}
         <header className="top">
           <h1>Центр управления</h1>
           <button className="primary" onClick={() => refreshAll()}>Обновить</button>
@@ -297,7 +354,7 @@ export function App() {
             <article className="card">
               <h3>Инструкции</h3>
               <table>
-                <thead><tr><th>Lang</th><th>Platform</th><th>Title</th><th>Body</th></tr></thead>
+                <thead><tr><th>Lang</th><th>Platform</th><th>Title</th><th>Body</th><th></th></tr></thead>
                 <tbody>
                   {state.instructions.map((it) => (
                     <tr key={it.id}>
@@ -305,6 +362,7 @@ export function App() {
                       <td>{it.platform}</td>
                       <td>{it.title}</td>
                       <td>{String(it.body || "").slice(0, 80)}...</td>
+                      <td><button className="danger" onClick={() => deleteInstruction(it.id)}>Удалить</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -316,25 +374,56 @@ export function App() {
         {active === "promos" && (
           <section className="grid">
             <article className="card">
-              <h3>Create Promo</h3>
+              <h3>Создать промокод</h3>
               <form onSubmit={createPromo} className="form">
                 <input name="code" placeholder="Code" required />
                 <select name="kind"><option value="amount">amount</option><option value="days">days</option></select>
                 <input name="valueMinor" type="number" placeholder="Value Minor" />
-                <button className="primary" type="submit">Save</button>
+                <button className="primary" type="submit">Сохранить</button>
               </form>
             </article>
             <article className="card">
-              <h3>Promos</h3>
-              <pre>{JSON.stringify(state.promos, null, 2)}</pre>
+              <h3>Промокоды</h3>
+              <table>
+                <thead><tr><th>Code</th><th>Type</th><th>Value</th><th>Used</th><th></th></tr></thead>
+                <tbody>
+                  {state.promos.map((p) => (
+                    <tr key={p.code}>
+                      <td>{p.code}</td><td>{p.kind}</td><td>{p.valueMinor ?? p.valueDays ?? 0}</td><td>{p.usedCount}</td>
+                      <td><button className="danger" onClick={() => deletePromo(p.code)}>Удалить</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </article>
           </section>
         )}
 
         {active === "campaigns" && (
-          <section className="card">
-            <h3>Campaigns</h3>
-            <pre>{JSON.stringify(state.campaigns, null, 2)}</pre>
+          <section className="grid">
+            <article className="card">
+              <h3>Создать кампанию</h3>
+              <form className="form" onSubmit={createCampaign}>
+                <input name="id" placeholder="ID (optional)" />
+                <input name="name" placeholder="Название" required />
+                <input name="channel" defaultValue="telegram" />
+                <button className="primary" type="submit">Сохранить кампанию</button>
+              </form>
+            </article>
+            <article className="card">
+              <h3>Кампании</h3>
+              <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Channel</th><th></th></tr></thead>
+                <tbody>
+                  {state.campaigns.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.id}</td><td>{c.name}</td><td>{c.channel}</td>
+                      <td><button className="danger" onClick={() => deleteCampaignById(c.id)}>Удалить</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </article>
           </section>
         )}
 
