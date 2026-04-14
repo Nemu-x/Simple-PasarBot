@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PasarBot Cabinet</title>
+  <style>
+    body{font-family:Inter,Arial,sans-serif;background:#0d1226;color:#e9edff;margin:0;padding:16px}
+    .card{background:#141b38;border:1px solid #2c386b;border-radius:12px;padding:12px;margin-bottom:12px}
+    h1,h2{margin:0 0 10px}
+    .muted{color:#9fb0e5}
+    pre{white-space:pre-wrap;word-break:break-word}
+  </style>
+</head>
+<body>
+  <h1>VPN Cabinet</h1>
+  <p class="muted" id="state">Loading...</p>
+  <div class="card"><h2>User</h2><pre id="user"></pre></div>
+  <div class="card"><h2>Subscription</h2><pre id="subscription"></pre></div>
+  <div class="card"><h2>Profile</h2><pre id="profile"></pre></div>
+  <div class="card"><h2>Payments</h2><pre id="payments"></pre></div>
+  <div class="card">
+    <h2>Renew</h2>
+    <button data-profile="m1">Renew 1M</button>
+    <button data-profile="m3">Renew 3M</button>
+    <button data-profile="m6">Renew 6M</button>
+    <button data-profile="m12">Renew 12M</button>
+    <pre id="renew-out"></pre>
+  </div>
+  <script>
+    let currentTelegramId = null;
+    async function load() {
+      const tg = window.Telegram && window.Telegram.WebApp;
+      const initData = tg?.initData || "";
+      const response = await fetch("/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData })
+      });
+      const payload = await response.json();
+      document.getElementById("state").textContent = response.ok ? "Ready" : "Failed to load";
+      document.getElementById("user").textContent = JSON.stringify(payload.user || null, null, 2);
+      document.getElementById("subscription").textContent = JSON.stringify(payload.subscription || null, null, 2);
+      document.getElementById("profile").textContent = JSON.stringify(payload.profile || null, null, 2);
+      document.getElementById("payments").textContent = JSON.stringify(payload.payments || [], null, 2);
+      currentTelegramId = payload.user?.telegramId || null;
+    }
+    document.querySelectorAll("button[data-profile]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!currentTelegramId) return;
+        const response = await fetch("/renew", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ telegramId: currentTelegramId, profileId: btn.dataset.profile })
+        });
+        const payload = await response.json();
+        document.getElementById("renew-out").textContent = JSON.stringify(payload, null, 2);
+        if (response.ok) {
+          await load();
+        }
+      });
+    });
+    load();
+  </script>
+</body>
+</html>

@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node -e \"console.log('miniapp placeholder')\"",
+    "dev": "node src/server.js",
     "build": "node -e \"console.log('miniapp build ok')\"",
     "lint": "node -e \"console.log('miniapp lint ok')\""
+  },
+  "dependencies": {
+    "express": "^4.21.2"
   }
 }
