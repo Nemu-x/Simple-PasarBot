@@ -373,3 +373,175 @@ export async function listAuditLogs(limit = 100) {
   );
   return result.rows;
 }
+
+export async function createBalanceEntry(entry) {
+  const result = await pool.query(
+    `INSERT INTO balance_ledger (id, user_id, entry_type, amount_minor, currency, source, source_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING id, user_id AS "userId", entry_type AS "entryType", amount_minor AS "amountMinor",
+      currency, source, source_id AS "sourceId", created_at AS "createdAt"`,
+    [entry.id || randomUUID(), entry.userId, entry.entryType, Number(entry.amountMinor), entry.currency || "RUB", entry.source, entry.sourceId || null]
+  );
+  return result.rows[0];
+}
+
+export async function getUserBalance(userId) {
+  const result = await pool.query(
+    `SELECT COALESCE(SUM(amount_minor), 0)::int AS "balanceMinor"
+     FROM balance_ledger
+     WHERE user_id = $1`,
+    [userId]
+  );
+  return result.rows[0]?.balanceMinor || 0;
+}
+
+export async function createSubscriptionOrder(order) {
+  const result = await pool.query(
+    `INSERT INTO subscription_orders (id, user_id, profile_id, status, amount_minor, currency, payment_transaction_id, idempotency_key, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+     ON CONFLICT (idempotency_key) DO UPDATE SET
+      status = EXCLUDED.status,
+      payment_transaction_id = EXCLUDED.payment_transaction_id,
+      updated_at = NOW()
+     RETURNING id, user_id AS "userId", profile_id AS "profileId", status, amount_minor AS "amountMinor",
+      currency, payment_transaction_id AS "paymentTransactionId", idempotency_key AS "idempotencyKey",
+      created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [
+      order.id || randomUUID(),
+      order.userId,
+      order.profileId,
+      order.status || "created",
+      Number(order.amountMinor || 0),
+      order.currency || "RUB",
+      order.paymentTransactionId || null,
+      order.idempotencyKey || randomUUID()
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function listPromoCodes() {
+  const result = await pool.query(
+    `SELECT id, code, kind, value_minor AS "valueMinor", value_days AS "valueDays", max_uses AS "maxUses",
+      used_count AS "usedCount", active, expires_at AS "expiresAt", created_at AS "createdAt"
+     FROM promo_codes
+     ORDER BY created_at DESC`
+  );
+  return result.rows;
+}
+
+export async function upsertPromoCode(promo) {
+  const result = await pool.query(
+    `INSERT INTO promo_codes (id, code, kind, value_minor, value_days, max_uses, active, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (code) DO UPDATE SET
+      kind = EXCLUDED.kind,
+      value_minor = EXCLUDED.value_minor,
+      value_days = EXCLUDED.value_days,
+      max_uses = EXCLUDED.max_uses,
+      active = EXCLUDED.active,
+      expires_at = EXCLUDED.expires_at
+     RETURNING id, code, kind, value_minor AS "valueMinor", value_days AS "valueDays", max_uses AS "maxUses",
+      used_count AS "usedCount", active, expires_at AS "expiresAt", created_at AS "createdAt"`,
+    [
+      promo.id || randomUUID(),
+      promo.code,
+      promo.kind || "amount",
+      promo.valueMinor == null ? null : Number(promo.valueMinor),
+      promo.valueDays == null ? null : Number(promo.valueDays),
+      promo.maxUses == null ? null : Number(promo.maxUses),
+      Boolean(promo.active ?? true),
+      promo.expiresAt || null
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function listCampaigns() {
+  const result = await pool.query(
+    `SELECT id, name, channel, payload_json AS "payload", active, created_at AS "createdAt"
+     FROM campaigns
+     ORDER BY created_at DESC`
+  );
+  return result.rows;
+}
+
+export async function upsertCampaign(campaign) {
+  const result = await pool.query(
+    `INSERT INTO campaigns (id, name, channel, payload_json, active)
+     VALUES ($1,$2,$3,$4::jsonb,$5)
+     ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      channel = EXCLUDED.channel,
+      payload_json = EXCLUDED.payload_json,
+      active = EXCLUDED.active
+     RETURNING id, name, channel, payload_json AS "payload", active, created_at AS "createdAt"`,
+    [campaign.id || randomUUID(), campaign.name, campaign.channel || "telegram", JSON.stringify(campaign.payload || {}), Boolean(campaign.active ?? true)]
+  );
+  return result.rows[0];
+}
+
+export async function createBroadcastJob(job) {
+  const result = await pool.query(
+    `INSERT INTO broadcast_jobs (id, campaign_id, status, payload_json, updated_at)
+     VALUES ($1,$2,$3,$4::jsonb,NOW())
+     RETURNING id, campaign_id AS "campaignId", status, payload_json AS "payload", created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [job.id || randomUUID(), job.campaignId || null, job.status || "pending", JSON.stringify(job.payload || {})]
+  );
+  return result.rows[0];
+}
+
+export async function listBroadcastJobs(limit = 50) {
+  const result = await pool.query(
+    `SELECT id, campaign_id AS "campaignId", status, payload_json AS "payload", created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM broadcast_jobs
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [Number(limit)]
+  );
+  return result.rows;
+}
+
+export async function listIncidentEvents(limit = 100) {
+  const result = await pool.query(
+    `SELECT id, level, source, message, meta_json AS "meta", created_at AS "createdAt"
+     FROM incident_events
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [Number(limit)]
+  );
+  return result.rows;
+}
+
+export async function createIncidentEvent(event) {
+  const result = await pool.query(
+    `INSERT INTO incident_events (id, level, source, message, meta_json)
+     VALUES ($1,$2,$3,$4,$5::jsonb)
+     RETURNING id, level, source, message, meta_json AS "meta", created_at AS "createdAt"`,
+    [event.id || randomUUID(), event.level || "info", event.source || "system", event.message, JSON.stringify(event.meta || {})]
+  );
+  return result.rows[0];
+}
+
+export async function listChannelPolicies() {
+  const result = await pool.query(
+    `SELECT id, code, payload_json AS "payload", active, created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM channel_policies
+     ORDER BY created_at DESC`
+  );
+  return result.rows;
+}
+
+export async function upsertChannelPolicy(policy) {
+  const result = await pool.query(
+    `INSERT INTO channel_policies (id, code, payload_json, active, updated_at)
+     VALUES ($1,$2,$3::jsonb,$4,NOW())
+     ON CONFLICT (code) DO UPDATE SET
+      payload_json = EXCLUDED.payload_json,
+      active = EXCLUDED.active,
+      updated_at = NOW()
+     RETURNING id, code, payload_json AS "payload", active, created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [policy.id || randomUUID(), policy.code, JSON.stringify(policy.payload || {}), Boolean(policy.active ?? true)]
+  );
+  return result.rows[0];
+}
