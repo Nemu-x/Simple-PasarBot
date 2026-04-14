@@ -78,6 +78,7 @@ export function App() {
     ],
     [state]
   );
+  const pasarConnected = Boolean(state.pasarStatus?.connected);
 
   async function runSmoke() {
     const checks = [
@@ -204,6 +205,9 @@ export function App() {
           </button>
         ))}
         <a className="logout" href="./logout">Выход</a>
+        <a className="repo" href="https://github.com/Nemu-x/Simple-PasarBot" target="_blank" rel="noreferrer">
+          GitHub проекта
+        </a>
       </aside>
 
       <main className="content">
@@ -222,7 +226,10 @@ export function App() {
             ))}
             <article className="card wide">
               <h3>Статус PasarGuard</h3>
-              <pre>{JSON.stringify(state.pasarStatus, null, 2)}</pre>
+              <div className={`status-pill ${pasarConnected ? "ok" : "bad"}`}>
+                {pasarConnected ? "Подключено" : "Отключено"}
+              </div>
+              <p className="muted">Шаблонов: {state.pasarStatus?.templatesCount ?? 0}</p>
             </article>
           </section>
         )}
@@ -262,7 +269,14 @@ export function App() {
             </article>
             <article className="card">
               <h3>Список профилей</h3>
-              <pre>{JSON.stringify(state.profiles, null, 2)}</pre>
+              <table>
+                <thead><tr><th>ID</th><th>Название</th><th>Дни</th><th>Цена</th></tr></thead>
+                <tbody>
+                  {state.profiles.map((p) => (
+                    <tr key={p.id}><td>{p.id}</td><td>{p.name}</td><td>{p.durationDays}</td><td>{p.priceMinor}</td></tr>
+                  ))}
+                </tbody>
+              </table>
             </article>
           </section>
         )}
@@ -282,7 +296,19 @@ export function App() {
             </article>
             <article className="card">
               <h3>Инструкции</h3>
-              <pre>{JSON.stringify(state.instructions, null, 2)}</pre>
+              <table>
+                <thead><tr><th>Lang</th><th>Platform</th><th>Title</th><th>Body</th></tr></thead>
+                <tbody>
+                  {state.instructions.map((it) => (
+                    <tr key={it.id}>
+                      <td>{it.lang}</td>
+                      <td>{it.platform}</td>
+                      <td>{it.title}</td>
+                      <td>{String(it.body || "").slice(0, 80)}...</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </article>
           </section>
         )}
@@ -329,7 +355,11 @@ export function App() {
             </article>
             <article className="card">
               <h3>Статус подключения</h3>
-              <pre>{JSON.stringify(state.pasarStatus, null, 2)}</pre>
+              <div className={`status-pill ${pasarConnected ? "ok" : "bad"}`}>
+                {pasarConnected ? "Подключено" : "Отключено"}
+              </div>
+              <p className="muted">Templates: {state.pasarStatus?.templatesCount ?? 0}</p>
+              <p className="muted">Причина: {state.pasarStatus?.reason || "-"}</p>
             </article>
           </section>
         )}
