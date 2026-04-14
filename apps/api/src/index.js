@@ -371,7 +371,8 @@ app.post("/trial/start", async (req, res) => {
   }
   const isMember = channelMember && (await checkChannelMembership(telegramId));
   if (!isMember) {
-    return res.status(403).json({ error: t(lang, "channelRequired") });
+    const channelHint = cfg.telegramChannel ? ` (${cfg.telegramChannel})` : "";
+    return res.status(403).json({ error: `${t(lang, "channelRequired")}${channelHint}` });
   }
 
   const user = await getOrCreateUser(telegramId);
@@ -469,7 +470,8 @@ app.post("/subscriptions/create", async (req, res) => {
     return res.status(404).json({ error: "Profile not found" });
   }
   if (profile.requireChannelMember && !(await checkChannelMembership(telegramId))) {
-    return res.status(403).json({ error: t(lang, "channelRequired") });
+    const channelHint = cfg.telegramChannel ? ` (${cfg.telegramChannel})` : "";
+    return res.status(403).json({ error: `${t(lang, "channelRequired")}${channelHint}` });
   }
   const user = await getOrCreateUser(telegramId);
   if (profile.isTrial && !canStartTrial(user)) {

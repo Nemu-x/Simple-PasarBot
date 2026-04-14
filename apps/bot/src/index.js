@@ -88,6 +88,29 @@ function mainKeyboard(lang) {
   };
 }
 
+function onboardingKeyboard(lang) {
+  const a = t(lang, "actions");
+  return {
+    inline_keyboard: [
+      [{ text: a.startTrial, callback_data: "flow:trial" }],
+      [{ text: a.openPlans, callback_data: "flow:plans" }],
+      [{ text: a.openCabinet, callback_data: "flow:cabinet" }],
+      [{ text: a.instructions, callback_data: "flow:instructions" }]
+    ]
+  };
+}
+
+function plansKeyboard(lang, plans) {
+  const rows = (plans || [])
+    .filter((p) => !p.isTrial)
+    .map((p) => [{ text: `${p.name} (${p.days}d)`, callback_data: `buy:${p.id}` }]);
+  if (!rows.length) {
+    rows.push([{ text: t(lang, "emptyPlans"), callback_data: "noop" }]);
+  }
+  rows.push([{ text: t(lang, "actions").startTrial, callback_data: "flow:trial" }]);
+  return { inline_keyboard: rows };
+}
+
 function resolveActionFromText(text, lang) {
   const value = String(text || "").trim();
   if (value === t(lang, "menuTrial")) return "trial";
@@ -157,13 +180,12 @@ async function handleCabinet(msg) {
 
 async function handleBuy(msg) {
   const lang = langForMessage(msg);
-  const response = await fetch(`${apiBase}/payments/create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: String(msg.from.id), planId: "monthly", amount: 499, lang })
+  const response = await fetch(`${apiBase}/profiles`);
+  const payload = await response.json().catch(() => ({}));
+  const profiles = payload?.profiles || [];
+  await bot.sendMessage(msg.chat.id, t(lang, "plansTitle"), {
+    reply_markup: plansKeyboard(lang, profiles)
   });
-  const payload = await response.json();
-  await bot.sendMessage(msg.chat.id, `${t(lang, "paymentCreated")} ${JSON.stringify(payload.payment)}`);
 }
 
 async function handleInstructions(msg) {
@@ -177,7 +199,7 @@ async function handleWallet(msg) {
   const lang = langForMessage(msg);
   const response = await fetch(`${apiBase}/wallet/${msg.from.id}`);
   const payload = await response.json().catch(() => ({}));
-  await bot.sendMessage(msg.chat.id, `${t(lang, "menuWallet")}: ${(payload.balanceMinor || 0) / 100} ${payload.currency || "RUB"}`);
+  await bot.sendMessage(msg.chat.id, `${t(lang, "walletBalance")}: ${(payload.balanceMinor || 0) / 100} ${payload.currency || "RUB"}`);
 }
 
 async function handleReferral(msg) {
@@ -187,7 +209,32 @@ async function handleReferral(msg) {
 
 async function handlePromo(msg) {
   const lang = langForMessage(msg);
-  await bot.sendMessage(msg.chat.id, `${t(lang, "menuPromo")}: отправь код в формате /promo CODE`);
+  await bot.sendMessage(msg.chat.id, `${t(lang, "menuPromo")}: /promo CODE`);
+}
+
+async function createOrderForPlan(chatId, telegramId, lang, profileId) {
+  const orderResponse = await fetch(`${apiBase}/orders/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ telegramId: String(telegramId), profileId })
+  });
+  const orderPayload = await orderResponse.json().catch(() => ({}));
+  if (!orderResponse.ok) {
+    await bot.sendMessage(chatId, orderPayload?.error || t(lang, "apiError"));
+    return;
+  }
+  const paymentResp = await fetch(`${apiBase}/payments/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId: String(telegramId),
+      planId: profileId,
+      amount: Number(orderPayload?.order?.amountMinor || 0) / 100,
+      lang
+    })
+  });
+  const paymentPayload = await paymentResp.json().catch(() => ({}));
+  await bot.sendMessage(chatId, `${t(lang, "orderCreated")}: ${profileId}\n${t(lang, "paymentCreated")} ${JSON.stringify(paymentPayload.payment || {})}`);
 }
 
 bot.onText(/\/start/, async (msg) => {
@@ -199,6 +246,9 @@ bot.onText(/\/start/, async (msg) => {
   await bot.sendMessage(msg.chat.id, t(lang, "autoLanguageNotice"));
   await bot.sendMessage(msg.chat.id, t(lang, "chooseLanguage"), { reply_markup: languageKeyboard() });
   await bot.sendMessage(msg.chat.id, t(lang, "welcome"), { reply_markup: mainKeyboard(lang) });
+  await bot.sendMessage(msg.chat.id, `${t(lang, "onboardingTitle")}\n${t(lang, "onboardingHint")}`, {
+    reply_markup: onboardingKeyboard(lang)
+  });
 });
 
 bot.onText(/\/menu/, async (msg) => {
@@ -252,7 +302,7 @@ bot.on("message", async (msg) => {
   } else if (action === "referral") {
     await handleReferral(msg);
   } else if (action === "support") {
-    await bot.sendMessage(msg.chat.id, `${t(lang, "menuSupport")}: @support`);
+    await bot.sendMessage(msg.chat.id, t(lang, "supportText"));
   } else if (action === "language") {
     await bot.sendMessage(msg.chat.id, t(lang, "chooseLanguage"), { reply_markup: languageKeyboard() });
   }
@@ -268,6 +318,24 @@ bot.on("callback_query", async (query) => {
       await bot.sendMessage(query.message.chat.id, t(chosen, "languageChanged"), {
         reply_markup: mainKeyboard(chosen)
       });
+      await bot.answerCallbackQuery(query.id);
+    }
+    if (data.startsWith("flow:")) {
+      const action = data.split(":")[1];
+      const msg = { from: query.from, chat: query.message.chat };
+      if (action === "trial") await handleTrial(msg);
+      if (action === "plans") await handleBuy(msg);
+      if (action === "cabinet") await handleCabinet(msg);
+      if (action === "instructions") await handleInstructions(msg);
+      await bot.answerCallbackQuery(query.id);
+    }
+    if (data.startsWith("buy:")) {
+      const planId = data.split(":")[1];
+      const lang = normalizeLang(query.from.language_code);
+      await createOrderForPlan(query.message.chat.id, query.from.id, lang, planId);
+      await bot.answerCallbackQuery(query.id);
+    }
+    if (data === "noop") {
       await bot.answerCallbackQuery(query.id);
     }
     return;
@@ -286,6 +354,10 @@ bot.onText(/\/buy/, async (msg) => {
   await handleBuy(msg);
 });
 
+bot.onText(/\/plans/, async (msg) => {
+  await handleBuy(msg);
+});
+
 bot.onText(/\/promo(?:\s+(\S+))?/, async (msg, match) => {
   const code = match?.[1];
   const lang = langForMessage(msg);
@@ -299,5 +371,5 @@ bot.onText(/\/promo(?:\s+(\S+))?/, async (msg, match) => {
     body: JSON.stringify({ telegramId: String(msg.from.id), profileId: "m1", promoCode: code })
   }).then((r) => r.json())
     .catch(() => ({}));
-  await bot.sendMessage(msg.chat.id, `${t(lang, "menuPromo")}: ${payload.appliedPromo ? "applied" : "invalid"}`);
+  await bot.sendMessage(msg.chat.id, `${t(lang, "menuPromo")}: ${payload.appliedPromo ? t(lang, "promoApplied") : t(lang, "promoInvalid")}`);
 });
