@@ -5,6 +5,10 @@
   "main": "src/index.js",
   "scripts": {
     "build": "node -e \"console.log('db build ok')\"",
-    "lint": "node -e \"console.log('db lint ok')\""
+    "lint": "node -e \"console.log('db lint ok')\"",
+    "migrate": "node src/migrate.js"
+  },
+  "dependencies": {
+    "pg": "^8.16.0"
   }
 }

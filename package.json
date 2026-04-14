@@ -8,10 +8,11 @@
     "packages/integrations/*"
   ],
   "scripts": {
+    "migrate": "npm --workspace @simple-pasarbot/db run migrate",
     "dev:api": "npm --workspace @simple-pasarbot/api run dev",
     "dev:bot": "npm --workspace @simple-pasarbot/bot run dev",
     "dev:worker": "npm --workspace @simple-pasarbot/worker run dev",
-    "build": "npm run -ws build",
-    "lint": "npm run -ws lint"
+    "build": "npm run --workspaces build",
+    "lint": "npm run --workspaces lint"
   }
 }

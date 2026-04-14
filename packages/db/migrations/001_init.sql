@@ -15,7 +15,7 @@ CREATE TABLE plans (
 
 CREATE TABLE subscriptions (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id),
+  user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
   plan_id TEXT NOT NULL REFERENCES plans(id),
   node_id TEXT,
   status TEXT NOT NULL,

@@ -3,9 +3,10 @@ import {
   getOrCreateUser,
   getPlan,
   getSubscriptionByUserId,
+  healthCheck,
   listPlans,
   listSubscriptions,
-  setUser,
+  markUserTrialUsed,
   upsertSubscription
 } from "@simple-pasarbot/db";
 import { canStartTrial, evaluateSubscription, shouldBlockForTraffic } from "@simple-pasarbot/domain";
@@ -13,7 +14,6 @@ import { getBaseInfo, syncUser } from "@simple-pasarbot/pasarguard";
 import { buildPaymentRequest, verifyWebhookSignature } from "@simple-pasarbot/platega";
 
 const app = express();
-app.use(express.json());
 
 const cfg = {
   port: Number(process.env.API_PORT || 8080),
@@ -24,11 +24,35 @@ const cfg = {
 };
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  healthCheck()
+    .then(() => res.json({ ok: true }))
+    .catch((error) => res.status(500).json({ ok: false, error: error.message }));
 });
 
-app.get("/plans", (_req, res) => {
-  res.json({ plans: listPlans() });
+app.post("/payments/webhook", express.raw({ type: "*/*" }), async (req, res) => {
+  const signature = req.headers["x-signature"];
+  const rawBody = req.body.toString("utf8");
+  if (!verifyWebhookSignature(rawBody, String(signature || ""), cfg.webhookSecret)) {
+    return res.status(401).json({ error: "invalid signature" });
+  }
+
+  const event = JSON.parse(rawBody);
+  if (event.status === "paid") {
+    const sub = await getSubscriptionByUserId(event.userId);
+    if (sub) {
+      sub.blocked = false;
+      sub.status = "active";
+      sub.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      await upsertSubscription(sub);
+    }
+  }
+  return res.json({ ok: true });
+});
+
+app.use(express.json());
+
+app.get("/plans", async (_req, res) => {
+  res.json({ plans: await listPlans() });
 });
 
 app.post("/trial/start", async (req, res) => {
@@ -40,11 +64,14 @@ app.post("/trial/start", async (req, res) => {
     return res.status(403).json({ error: "channel subscription required" });
   }
 
-  const user = getOrCreateUser(telegramId);
+  const user = await getOrCreateUser(telegramId);
   if (!canStartTrial(user)) {
     return res.status(409).json({ error: "trial already used" });
   }
-  const trial = getPlan("trial");
+  const trial = await getPlan("trial");
+  if (!trial) {
+    return res.status(500).json({ error: "trial plan is not configured" });
+  }
   const startsAt = new Date();
   const expiresAt = new Date(startsAt.getTime() + trial.days * 24 * 60 * 60 * 1000);
   const subscription = {
@@ -61,9 +88,8 @@ app.post("/trial/start", async (req, res) => {
     expiresAt: expiresAt.toISOString()
   };
 
-  user.hasUsedTrial = true;
-  setUser(user);
-  upsertSubscription(subscription);
+  await markUserTrialUsed(user.id);
+  const saved = await upsertSubscription(subscription);
 
   if (cfg.pasarguardBaseUrl && cfg.pasarguardApiKey) {
     await syncUser(cfg.pasarguardBaseUrl, cfg.pasarguardApiKey, {
@@ -72,12 +98,12 @@ app.post("/trial/start", async (req, res) => {
     }).catch(() => undefined);
   }
 
-  return res.json({ subscription });
+  return res.json({ subscription: saved });
 });
 
-app.get("/cabinet/:telegramId", (req, res) => {
-  const user = getOrCreateUser(req.params.telegramId);
-  const subscription = getSubscriptionByUserId(user.id);
+app.get("/cabinet/:telegramId", async (req, res) => {
+  const user = await getOrCreateUser(req.params.telegramId);
+  const subscription = await getSubscriptionByUserId(user.id);
   const status = subscription ? evaluateSubscription(subscription) : "no_subscription";
   res.json({ user, subscription, status });
 });
@@ -93,27 +119,8 @@ app.post("/payments/create", (req, res) => {
   res.json({ payment: payload });
 });
 
-app.post("/payments/webhook", express.raw({ type: "*/*" }), (req, res) => {
-  const signature = req.headers["x-signature"];
-  const rawBody = req.body.toString("utf8");
-  if (!verifyWebhookSignature(rawBody, String(signature || ""), cfg.webhookSecret)) {
-    return res.status(401).json({ error: "invalid signature" });
-  }
-  const event = JSON.parse(rawBody);
-  if (event.status === "paid") {
-    const sub = getSubscriptionByUserId(event.userId);
-    if (sub) {
-      sub.blocked = false;
-      sub.status = "active";
-      sub.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      upsertSubscription(sub);
-    }
-  }
-  return res.json({ ok: true });
-});
-
-app.get("/admin/subscriptions", (_req, res) => {
-  res.json({ data: listSubscriptions() });
+app.get("/admin/subscriptions", async (_req, res) => {
+  res.json({ data: await listSubscriptions() });
 });
 
 app.get("/admin/pasarguard/info", async (_req, res) => {
@@ -124,16 +131,16 @@ app.get("/admin/pasarguard/info", async (_req, res) => {
   return res.json({ info });
 });
 
-app.post("/admin/subscriptions/reconcile", (req, res) => {
+app.post("/admin/subscriptions/reconcile", async (req, res) => {
   const { userId, trafficUsedBytes } = req.body;
-  const sub = getSubscriptionByUserId(userId);
+  const sub = await getSubscriptionByUserId(userId);
   if (!sub) {
     return res.status(404).json({ error: "subscription not found" });
   }
   if (shouldBlockForTraffic(sub, Number(trafficUsedBytes || 0))) {
     sub.blocked = true;
     sub.status = "blocked";
-    upsertSubscription(sub);
+    await upsertSubscription(sub);
   }
   res.json({ subscription: sub });
 });
