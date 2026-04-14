@@ -137,7 +137,7 @@ function isAuthed(req) {
 
 function authMiddleware(req, res, next) {
   if (!isAuthed(req)) {
-    return res.redirect("/login");
+    return res.redirect("login");
   }
   return next();
 }
@@ -153,7 +153,7 @@ app.get("/login", (_req, res) => {
   res.send(
     pageShell(`
 <h1>Admin Login</h1>
-<form method="post" action="/login">
+<form method="post" action="login">
 <label>Username</label><input name="username" />
 <label>Password</label><input name="password" type="password" />
 <button type="submit">Sign in</button>
@@ -164,7 +164,7 @@ app.get("/login", (_req, res) => {
 
 app.post("/login", (req, res) => {
   if (isRateLimited(req)) {
-    return res.status(429).send(pageShell("<h1>Too many attempts. Try later.</h1><a href='/login'>Back</a>"));
+    return res.status(429).send(pageShell("<h1>Too many attempts. Try later.</h1><a href='login'>Back</a>"));
   }
   verifyPassword(req.body.password || "")
     .then((passwordOk) => {
@@ -177,14 +177,14 @@ app.post("/login", (req, res) => {
           secure: cfg.secureCookies,
           maxAge: sessionTtlMs()
         });
-        return res.redirect("/");
+        return res.redirect("./");
       }
       registerFailedAttempt(req);
-      return res.status(401).send(pageShell("<h1>Invalid credentials</h1><a href='/login'>Back</a>"));
+      return res.status(401).send(pageShell("<h1>Invalid credentials</h1><a href='login'>Back</a>"));
     })
     .catch(() => {
       registerFailedAttempt(req);
-      return res.status(500).send(pageShell("<h1>Auth error</h1><a href='/login'>Back</a>"));
+      return res.status(500).send(pageShell("<h1>Auth error</h1><a href='login'>Back</a>"));
     });
 });
 
@@ -194,7 +194,7 @@ app.get("/logout", (req, res) => {
     sessionStore.delete(parsed.id);
   }
   res.clearCookie("admin_session");
-  res.redirect("/login");
+  res.redirect("login");
 });
 
 app.use("/api/proxy", authMiddleware);

@@ -2,11 +2,11 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
 async function getJson(path) {
-  const r = await fetch(`/api/proxy/${path}`);
+  const r = await fetch(`api/proxy/${path}`);
   return r.json();
 }
 async function postJson(path, body) {
-  const r = await fetch(`/api/proxy/${path}`, {
+  const r = await fetch(`api/proxy/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -14,7 +14,7 @@ async function postJson(path, body) {
   return r.json();
 }
 async function deleteJson(path) {
-  const r = await fetch(`/api/proxy/${path}`, { method: "DELETE" });
+  const r = await fetch(`api/proxy/${path}`, { method: "DELETE" });
   return r.json();
 }
 
