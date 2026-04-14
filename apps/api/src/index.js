@@ -2,6 +2,7 @@ import express from "express";
 import QRCode from "qrcode";
 import {
   deletePlan,
+  deleteSubscriptionByUserId,
   getOrCreateUser,
   getInstruction,
   getIntegrationSetting,
@@ -25,6 +26,7 @@ import { buildPaymentRequest, createInvoice, verifyWebhookSignature } from "@sim
 import { normalizeLang, requestLang, t } from "./i18n.js";
 import {
   createUserFromTemplate,
+  deletePanelUser,
   fetchAdminToken,
   getUserTemplates,
   getUsersSimple,
@@ -66,6 +68,10 @@ function pickTemplateId(config, templateKey) {
     return Number(config.noWlTemplateId);
   }
   return null;
+}
+
+function isPasarConnected(config) {
+  return Boolean(config.panelUrl && config.username && config.password);
 }
 
 function parseInboundList(value) {
@@ -200,7 +206,11 @@ app.post("/trial/start", async (req, res) => {
 
   // Preferred flow: create user via PasarGuard panel template API and use returned subscription_url.
   const selectedTemplateId = pickTemplateId(pasarCfg, templateKey);
-  if (pasarCfg.panelUrl && pasarCfg.username && pasarCfg.password && selectedTemplateId) {
+  if (isPasarConnected(pasarCfg) && !selectedTemplateId) {
+    return res.status(400).json({ error: "PasarGuard template is not configured for trial flow" });
+  }
+
+  if (isPasarConnected(pasarCfg) && selectedTemplateId) {
     try {
       const panelToken = await fetchAdminToken(pasarCfg.panelUrl, pasarCfg.username, pasarCfg.password);
       const created = await createUserFromTemplate(pasarCfg.panelUrl, panelToken, {
@@ -211,11 +221,14 @@ app.post("/trial/start", async (req, res) => {
       if (created?.subscription_url) {
         saved = await upsertSubscription({
           ...saved,
-          subscriptionUrl: created.subscription_url
+          subscriptionUrl: created.subscription_url,
+          remoteUsername: created.username || generatedEmail
         });
+      } else {
+        return res.status(502).json({ error: "PasarGuard user created without subscription URL" });
       }
-    } catch (_error) {
-      // Keep fallback subscription URL if template creation failed.
+    } catch (error) {
+      return res.status(502).json({ error: `PasarGuard create failed: ${error.message}` });
     }
   }
 
@@ -437,6 +450,20 @@ app.post("/admin/subscriptions/reconcile", async (req, res) => {
     await upsertSubscription(sub);
   }
   res.json({ subscription: sub });
+});
+
+app.delete("/admin/subscriptions/:userId", async (req, res) => {
+  const userId = req.params.userId;
+  const sub = await getSubscriptionByUserId(userId);
+  if (sub?.remoteUsername) {
+    const pasarCfg = await getPasarRuntimeConfig();
+    if (isPasarConnected(pasarCfg)) {
+      const panelToken = await fetchAdminToken(pasarCfg.panelUrl, pasarCfg.username, pasarCfg.password);
+      await deletePanelUser(pasarCfg.panelUrl, panelToken, sub.remoteUsername);
+    }
+  }
+  await deleteSubscriptionByUserId(userId);
+  return res.json({ ok: true });
 });
 
 app.listen(cfg.port, () => {

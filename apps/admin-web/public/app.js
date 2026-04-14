@@ -137,7 +137,12 @@ async function refreshSubs() {
   tbody.innerHTML = "";
   (out.data || []).forEach((s) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${s.userId}</td><td>${s.planId}</td><td>${s.status}</td><td>${s.expiresAt}</td><td>${s.subscriptionUrl || "-"}</td>`;
+    tr.innerHTML = `<td>${s.userId}</td><td>${s.planId}</td><td>${s.status}</td><td>${s.expiresAt}</td><td>${s.subscriptionUrl || "-"}</td><td><button data-id="${s.userId}">Delete</button></td>`;
+    tr.querySelector("button").onclick = async () => {
+      await deleteJson(`admin/subscriptions/${s.userId}`);
+      await refreshSubs();
+      await refreshDashboard();
+    };
     tbody.appendChild(tr);
   });
 }

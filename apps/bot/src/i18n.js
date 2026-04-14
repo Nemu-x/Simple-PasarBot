@@ -19,6 +19,8 @@ const dict = {
     menuCabinet: "My Cabinet",
     menuBuy: "Buy",
     menuInstructions: "Instructions",
+    menuLanguage: "Language",
+    chooseLanguage: "Choose language:",
     platforms: {
       universal: "Universal",
       ios: "iOS",
@@ -47,6 +49,8 @@ const dict = {
     menuCabinet: "Мой кабинет",
     menuBuy: "Купить",
     menuInstructions: "Инструкции",
+    menuLanguage: "Язык",
+    chooseLanguage: "Выберите язык:",
     platforms: {
       universal: "Универсально",
       ios: "iOS",

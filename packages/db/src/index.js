@@ -99,8 +99,8 @@ export async function upsertSubscription(subscription) {
   const id = subscription.id || randomUUID();
   const result = await pool.query(
     `INSERT INTO subscriptions (
-      id, user_id, plan_id, node_id, status, is_trial, blocked, traffic_used_bytes, traffic_limit_bytes, starts_at, expires_at, subscription_url
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      id, user_id, plan_id, node_id, status, is_trial, blocked, traffic_used_bytes, traffic_limit_bytes, starts_at, expires_at, subscription_url, remote_username
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     ON CONFLICT (user_id) DO UPDATE SET
       plan_id = EXCLUDED.plan_id,
       node_id = EXCLUDED.node_id,
@@ -111,10 +111,11 @@ export async function upsertSubscription(subscription) {
       traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
       starts_at = EXCLUDED.starts_at,
       expires_at = EXCLUDED.expires_at,
-      subscription_url = EXCLUDED.subscription_url
+      subscription_url = EXCLUDED.subscription_url,
+      remote_username = EXCLUDED.remote_username
     RETURNING id, user_id AS "userId", plan_id AS "planId", node_id AS "nodeId", status, is_trial AS "isTrial",
       blocked, traffic_used_bytes AS "trafficUsedBytes", traffic_limit_bytes AS "trafficLimitBytes",
-      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl"`,
+      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl", remote_username AS "remoteUsername"`,
     [
       id,
       subscription.userId,
@@ -127,7 +128,8 @@ export async function upsertSubscription(subscription) {
       subscription.trafficLimitBytes ? Number(subscription.trafficLimitBytes) : null,
       new Date(subscription.startsAt),
       new Date(subscription.expiresAt),
-      subscription.subscriptionUrl || null
+      subscription.subscriptionUrl || null,
+      subscription.remoteUsername || null
     ]
   );
   return result.rows[0];
@@ -137,7 +139,7 @@ export async function getSubscriptionByUserId(userId) {
   const result = await pool.query(
     `SELECT id, user_id AS "userId", plan_id AS "planId", node_id AS "nodeId", status, is_trial AS "isTrial",
       blocked, traffic_used_bytes AS "trafficUsedBytes", traffic_limit_bytes AS "trafficLimitBytes",
-      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl"
+      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl", remote_username AS "remoteUsername"
      FROM subscriptions WHERE user_id = $1`,
     [userId]
   );
@@ -148,10 +150,14 @@ export async function listSubscriptions() {
   const result = await pool.query(
     `SELECT id, user_id AS "userId", plan_id AS "planId", node_id AS "nodeId", status, is_trial AS "isTrial",
       blocked, traffic_used_bytes AS "trafficUsedBytes", traffic_limit_bytes AS "trafficLimitBytes",
-      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl"
+      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl", remote_username AS "remoteUsername"
      FROM subscriptions ORDER BY starts_at DESC`
   );
   return result.rows;
+}
+
+export async function deleteSubscriptionByUserId(userId) {
+  await pool.query("DELETE FROM subscriptions WHERE user_id = $1", [userId]);
 }
 
 export async function listInstructions(code, lang, platform) {

@@ -79,7 +79,8 @@ function mainKeyboard(lang) {
   return {
     keyboard: [
       [t(lang, "menuTrial"), t(lang, "menuCabinet")],
-      [t(lang, "menuBuy"), t(lang, "menuInstructions")]
+      [t(lang, "menuBuy"), t(lang, "menuInstructions")],
+      [t(lang, "menuLanguage")]
     ],
     resize_keyboard: true
   };
@@ -91,7 +92,17 @@ function resolveActionFromText(text, lang) {
   if (value === t(lang, "menuCabinet")) return "cabinet";
   if (value === t(lang, "menuBuy")) return "buy";
   if (value === t(lang, "menuInstructions")) return "instructions";
+  if (value === t(lang, "menuLanguage")) return "language";
   return null;
+}
+
+function languageKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "English", callback_data: "lang:en" }],
+      [{ text: "Русский", callback_data: "lang:ru" }]
+    ]
+  };
 }
 
 async function handleTrial(msg) {
@@ -196,12 +207,23 @@ bot.on("message", async (msg) => {
     await handleBuy(msg);
   } else if (action === "instructions") {
     await handleInstructions(msg);
+  } else if (action === "language") {
+    await bot.sendMessage(msg.chat.id, t(lang, "chooseLanguage"), { reply_markup: languageKeyboard() });
   }
 });
 
 bot.on("callback_query", async (query) => {
   const data = query.data || "";
   if (!data.startsWith("instruction:")) {
+    if (data.startsWith("lang:")) {
+      const chosen = normalizeLang(data.split(":")[1]);
+      userLangCache.set(String(query.from.id), chosen);
+      await saveLanguage(query.from.id, chosen);
+      await bot.sendMessage(query.message.chat.id, t(chosen, "languageChanged"), {
+        reply_markup: mainKeyboard(chosen)
+      });
+      await bot.answerCallbackQuery(query.id);
+    }
     return;
   }
   const platform = data.split(":")[1] || "universal";

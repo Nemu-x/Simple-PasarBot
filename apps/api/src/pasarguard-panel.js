@@ -91,3 +91,15 @@ export async function createUserFromTemplate(panelBaseUrl, accessToken, { templa
   });
   return response.json().catch(() => ({}));
 }
+
+export async function deletePanelUser(panelBaseUrl, accessToken, username) {
+  const response = await fetch(`${normalizeBase(panelBaseUrl)}/api/user/${encodeURIComponent(username)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Delete panel user failed with ${response.status}`);
+  }
+}
