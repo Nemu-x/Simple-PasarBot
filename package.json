@@ -1,0 +1,17 @@
+{
+  "name": "simple-pasarbot",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "packages/integrations/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace @simple-pasarbot/api run dev",
+    "dev:bot": "npm --workspace @simple-pasarbot/bot run dev",
+    "dev:worker": "npm --workspace @simple-pasarbot/worker run dev",
+    "build": "npm run -ws build",
+    "lint": "npm run -ws lint"
+  }
+}
