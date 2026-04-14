@@ -13,6 +13,7 @@
     "@simple-pasarbot/domain": "0.1.0",
     "@simple-pasarbot/pasarguard": "0.1.0",
     "@simple-pasarbot/platega": "0.1.0",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
   }
 }

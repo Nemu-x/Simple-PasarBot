@@ -71,8 +71,8 @@ export async function upsertSubscription(subscription) {
   const id = subscription.id || randomUUID();
   const result = await pool.query(
     `INSERT INTO subscriptions (
-      id, user_id, plan_id, node_id, status, is_trial, blocked, traffic_used_bytes, traffic_limit_bytes, starts_at, expires_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      id, user_id, plan_id, node_id, status, is_trial, blocked, traffic_used_bytes, traffic_limit_bytes, starts_at, expires_at, subscription_url
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     ON CONFLICT (user_id) DO UPDATE SET
       plan_id = EXCLUDED.plan_id,
       node_id = EXCLUDED.node_id,
@@ -82,10 +82,11 @@ export async function upsertSubscription(subscription) {
       traffic_used_bytes = EXCLUDED.traffic_used_bytes,
       traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
       starts_at = EXCLUDED.starts_at,
-      expires_at = EXCLUDED.expires_at
+      expires_at = EXCLUDED.expires_at,
+      subscription_url = EXCLUDED.subscription_url
     RETURNING id, user_id AS "userId", plan_id AS "planId", node_id AS "nodeId", status, is_trial AS "isTrial",
       blocked, traffic_used_bytes AS "trafficUsedBytes", traffic_limit_bytes AS "trafficLimitBytes",
-      starts_at AS "startsAt", expires_at AS "expiresAt"`,
+      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl"`,
     [
       id,
       subscription.userId,
@@ -97,7 +98,8 @@ export async function upsertSubscription(subscription) {
       Number(subscription.trafficUsedBytes || 0),
       subscription.trafficLimitBytes ? Number(subscription.trafficLimitBytes) : null,
       new Date(subscription.startsAt),
-      new Date(subscription.expiresAt)
+      new Date(subscription.expiresAt),
+      subscription.subscriptionUrl || null
     ]
   );
   return result.rows[0];
@@ -107,7 +109,7 @@ export async function getSubscriptionByUserId(userId) {
   const result = await pool.query(
     `SELECT id, user_id AS "userId", plan_id AS "planId", node_id AS "nodeId", status, is_trial AS "isTrial",
       blocked, traffic_used_bytes AS "trafficUsedBytes", traffic_limit_bytes AS "trafficLimitBytes",
-      starts_at AS "startsAt", expires_at AS "expiresAt"
+      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl"
      FROM subscriptions WHERE user_id = $1`,
     [userId]
   );
@@ -118,8 +120,54 @@ export async function listSubscriptions() {
   const result = await pool.query(
     `SELECT id, user_id AS "userId", plan_id AS "planId", node_id AS "nodeId", status, is_trial AS "isTrial",
       blocked, traffic_used_bytes AS "trafficUsedBytes", traffic_limit_bytes AS "trafficLimitBytes",
-      starts_at AS "startsAt", expires_at AS "expiresAt"
+      starts_at AS "startsAt", expires_at AS "expiresAt", subscription_url AS "subscriptionUrl"
      FROM subscriptions ORDER BY starts_at DESC`
   );
   return result.rows;
+}
+
+export async function listInstructions(code) {
+  const result = code
+    ? await pool.query(
+        `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM instructions WHERE code = $1 ORDER BY lang ASC`,
+        [code]
+      )
+    : await pool.query(
+        `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM instructions ORDER BY code ASC, lang ASC`
+      );
+  return result.rows;
+}
+
+export async function getInstruction(code, lang) {
+  const direct = await pool.query(
+    `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM instructions WHERE code = $1 AND lang = $2`,
+    [code, lang]
+  );
+  if (direct.rowCount) {
+    return direct.rows[0];
+  }
+  const fallback = await pool.query(
+    `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM instructions WHERE code = $1 AND lang = 'en'`,
+    [code]
+  );
+  return fallback.rows[0] || null;
+}
+
+export async function upsertInstruction({ code, lang, title, body, imageUrl }) {
+  const result = await pool.query(
+    `INSERT INTO instructions (id, code, lang, title, body, image_url)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (code, lang) DO UPDATE SET
+      title = EXCLUDED.title,
+      body = EXCLUDED.body,
+      image_url = EXCLUDED.image_url,
+      updated_at = NOW()
+     RETURNING id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [randomUUID(), code, lang, title, body, imageUrl || null]
+  );
+  return result.rows[0];
 }

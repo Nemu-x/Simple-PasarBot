@@ -1,13 +1,17 @@
 import express from "express";
+import QRCode from "qrcode";
 import {
   getOrCreateUser,
+  getInstruction,
   getPlan,
   getSubscriptionByUserId,
   healthCheck,
+  listInstructions,
   listPlans,
   listSubscriptions,
   markUserTrialUsed,
   setUserPreferredLanguage,
+  upsertInstruction,
   upsertSubscription
 } from "@simple-pasarbot/db";
 import { canStartTrial, evaluateSubscription, shouldBlockForTraffic } from "@simple-pasarbot/domain";
@@ -24,6 +28,19 @@ const cfg = {
   webhookSecret: process.env.PLATEGA_WEBHOOK_SECRET || "dev-secret",
   appBaseUrl: process.env.APP_BASE_URL || "http://localhost:8080"
 };
+
+function buildSubscriptionUrl(subscriptionId) {
+  return `${cfg.appBaseUrl.replace(/\/$/, "")}/subscription/${subscriptionId}`;
+}
+
+async function instructionBundle(lang, subscriptionUrl) {
+  const instruction = await getInstruction("connect_vpn", lang);
+  const qrDataUrl = subscriptionUrl ? await QRCode.toDataURL(subscriptionUrl, { width: 320, margin: 1 }) : null;
+  return {
+    instruction,
+    qrDataUrl
+  };
+}
 
 app.get("/health", (_req, res) => {
   healthCheck()
@@ -88,6 +105,7 @@ app.post("/trial/start", async (req, res) => {
     trafficUsedBytes: 0,
     trafficLimitBytes: trial.trafficLimitBytes,
     nodeId: nodeTemplate,
+    subscriptionUrl: buildSubscriptionUrl(`${user.id}-trial`),
     startsAt: startsAt.toISOString(),
     expiresAt: expiresAt.toISOString()
   };
@@ -102,14 +120,29 @@ app.post("/trial/start", async (req, res) => {
     }).catch(() => undefined);
   }
 
-  return res.json({ subscription: saved });
+  const bundle = await instructionBundle(lang, saved.subscriptionUrl);
+  return res.json({
+    message: t(lang, "trialStarted"),
+    subscription: saved,
+    instruction: bundle.instruction,
+    qrDataUrl: bundle.qrDataUrl
+  });
 });
 
 app.get("/cabinet/:telegramId", async (req, res) => {
   const user = await getOrCreateUser(req.params.telegramId);
+  const lang = requestLang(req, user.preferredLanguage || "en");
   const subscription = await getSubscriptionByUserId(user.id);
   const status = subscription ? evaluateSubscription(subscription) : "no_subscription";
-  res.json({ user, subscription, status });
+  const bundle = await instructionBundle(lang, subscription?.subscriptionUrl || null);
+  res.json({
+    message: t(lang, "cabinetLoaded"),
+    user,
+    subscription,
+    status,
+    instruction: bundle.instruction,
+    qrDataUrl: bundle.qrDataUrl
+  });
 });
 
 app.post("/users/language", async (req, res) => {
@@ -123,18 +156,50 @@ app.post("/users/language", async (req, res) => {
 });
 
 app.post("/payments/create", (req, res) => {
+  const lang = requestLang(req);
   const { userId, planId, amount } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: t(lang, "userIdRequired") });
+  }
   const payload = buildPaymentRequest({
     userId,
     planId,
     amount,
     callbackUrl: `${cfg.appBaseUrl}/payments/webhook`
   });
-  res.json({ payment: payload });
+  res.json({ message: t(lang, "paymentPrepared"), payment: payload });
 });
 
 app.get("/admin/subscriptions", async (_req, res) => {
   res.json({ data: await listSubscriptions() });
+});
+
+app.get("/admin/instructions", async (req, res) => {
+  const lang = requestLang(req);
+  const data = await listInstructions(req.query.code ? String(req.query.code) : undefined);
+  res.json({ message: t(lang, "cabinetLoaded"), data });
+});
+
+app.post("/admin/instructions", async (req, res) => {
+  const lang = requestLang(req);
+  const { code, locale, title, body, imageUrl } = req.body;
+  if (!code) {
+    return res.status(400).json({ error: t(lang, "codeRequired") });
+  }
+  if (!title) {
+    return res.status(400).json({ error: t(lang, "titleRequired") });
+  }
+  if (!body) {
+    return res.status(400).json({ error: t(lang, "bodyRequired") });
+  }
+  const saved = await upsertInstruction({
+    code: String(code),
+    lang: normalizeLang(locale || lang),
+    title: String(title),
+    body: String(body),
+    imageUrl: imageUrl ? String(imageUrl) : null
+  });
+  return res.json({ message: t(lang, "instructionSaved"), instruction: saved });
 });
 
 app.get("/admin/pasarguard/info", async (_req, res) => {

@@ -33,19 +33,24 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 ## Current MVP scope
 
 - Trial subscriptions by Telegram ID.
+- RU/EN localization for bot and API responses.
 - Channel check gate (request payload flag for now).
 - Payment request creation and webhook verification flow.
 - Subscription blocking for expired/traffic-overlimit.
 - PasarGuard user sync and info endpoint hooks.
-- Telegram bot commands: `/start`, `/trial`, `/cabinet`, `/buy`.
+- Telegram bot commands: `/start`, `/trial`, `/cabinet`, `/buy`, `/lang`.
+- User receives subscription URL + configurable instruction + QR code.
 
 ## Core endpoints
 
 - `GET /plans`
 - `POST /trial/start`
 - `GET /cabinet/:telegramId`
+- `POST /users/language`
 - `POST /payments/create`
 - `POST /payments/webhook`
 - `GET /admin/subscriptions`
 - `POST /admin/subscriptions/reconcile`
+- `GET /admin/instructions`
+- `POST /admin/instructions`
 - `GET /admin/pasarguard/info`

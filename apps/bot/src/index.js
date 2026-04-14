@@ -25,6 +25,36 @@ async function saveLanguage(telegramId, lang) {
   }).catch(() => undefined);
 }
 
+function dataUrlToBuffer(dataUrl) {
+  const parts = String(dataUrl).split(",");
+  if (parts.length < 2) {
+    return null;
+  }
+  return Buffer.from(parts[1], "base64");
+}
+
+async function sendInstruction(chatId, lang, payload) {
+  const subscriptionUrl = payload?.subscription?.subscriptionUrl;
+  const instruction = payload?.instruction;
+  const blocks = [t(lang, "instructionTitle")];
+  if (instruction) {
+    blocks.push(`${instruction.title}\n${instruction.body}`);
+  } else {
+    blocks.push(t(lang, "instructionMissing"));
+  }
+  if (subscriptionUrl) {
+    blocks.push(`${t(lang, "subscriptionUrl")} ${subscriptionUrl}`);
+  }
+  await bot.sendMessage(chatId, blocks.join("\n\n"));
+
+  if (payload?.qrDataUrl) {
+    const image = dataUrlToBuffer(payload.qrDataUrl);
+    if (image) {
+      await bot.sendPhoto(chatId, image, { caption: t(lang, "qrCaption") });
+    }
+  }
+}
+
 bot.onText(/\/start/, async (msg) => {
   const lang = langForMessage(msg);
   await saveLanguage(msg.from.id, lang);
@@ -45,20 +75,36 @@ bot.onText(/\/lang(?:\s+(\w+))?/, async (msg, match) => {
 
 bot.onText(/\/trial/, async (msg) => {
   const lang = langForMessage(msg);
-  const response = await fetch(`${apiBase}/trial/start`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ telegramId: msg.from.id, channelMember: true, nodeTemplate: "no-whitelist", lang })
-  });
-  const payload = await response.json();
-  await bot.sendMessage(msg.chat.id, JSON.stringify(payload, null, 2));
+  try {
+    const response = await fetch(`${apiBase}/trial/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegramId: msg.from.id, channelMember: true, nodeTemplate: "no-whitelist", lang })
+    });
+    const payload = await response.json();
+    await bot.sendMessage(msg.chat.id, payload?.message || t(lang, "trialCreated"));
+    await sendInstruction(msg.chat.id, lang, payload);
+  } catch (_error) {
+    await bot.sendMessage(msg.chat.id, t(lang, "apiError"));
+  }
 });
 
 bot.onText(/\/cabinet/, async (msg) => {
   const lang = langForMessage(msg);
-  const response = await fetch(`${apiBase}/cabinet/${msg.from.id}?lang=${lang}`);
-  const payload = await response.json();
-  await bot.sendMessage(msg.chat.id, JSON.stringify(payload, null, 2));
+  try {
+    const response = await fetch(`${apiBase}/cabinet/${msg.from.id}?lang=${lang}`);
+    const payload = await response.json();
+    const summary = [
+      t(lang, "cabinetTitle"),
+      `${t(lang, "statusLabel")}: ${payload.status || "-"}`,
+      `${t(lang, "planLabel")}: ${payload.subscription?.planId || "-"}`,
+      `${t(lang, "expiresLabel")}: ${payload.subscription?.expiresAt || "-"}`
+    ].join("\n");
+    await bot.sendMessage(msg.chat.id, summary);
+    await sendInstruction(msg.chat.id, lang, payload);
+  } catch (_error) {
+    await bot.sendMessage(msg.chat.id, t(lang, "apiError"));
+  }
 });
 
 bot.onText(/\/buy/, async (msg) => {
