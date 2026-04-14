@@ -60,6 +60,9 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 - `POST /users/language`
 - `POST /payments/create`
 - `POST /payments/webhook`
+- `POST /orders/create`
+- `GET /wallet/:telegramId`
+- `POST /wallet/topup`
 - `GET /profiles`
 - `POST /subscriptions/create`
 - `POST /subscriptions/renew`
@@ -68,6 +71,16 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 - `GET /admin/profiles`
 - `POST /admin/profiles`
 - `GET /admin/audit`
+- `GET /admin/promos`
+- `POST /admin/promos`
+- `GET /admin/campaigns`
+- `POST /admin/campaigns`
+- `POST /admin/broadcasts`
+- `GET /admin/broadcasts`
+- `GET /admin/channel-policies`
+- `POST /admin/channel-policies`
+- `GET /admin/incidents`
+- `GET /admin/analytics/summary`
 - `POST /admin/subscriptions/reconcile`
 - `GET /admin/instructions`
 - `POST /admin/instructions`
@@ -76,3 +89,8 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 - `GET /admin/pasarguard/info`
 - `POST /admin/pasarguard/connect`
 - `GET /admin/pasarguard/settings`
+- `POST /admin/pasarguard/user_action`
+- `POST /admin/pasarguard/reconcile`
+- `GET /miniapp/catalog`
+- `POST /landing/checkout`
+- `POST /gifts/create`

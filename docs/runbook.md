@@ -59,3 +59,10 @@
 - API down: inspect `api` logs.
 - Payments mismatch: replay webhook with valid signature.
 - Users blocked unexpectedly: check `packages/worker` interval logs.
+
+## Smoke parity checks
+
+- `POST /orders/create` with `telegramId` + `profileId`.
+- `GET /wallet/:telegramId` after topup.
+- `POST /admin/pasarguard/reconcile` and confirm non-error response.
+- `GET /admin/analytics/summary` for control-plane health.
