@@ -2,12 +2,17 @@ import express from "express";
 import crypto from "node:crypto";
 import QRCode from "qrcode";
 import {
+  createBalanceEntry,
+  createBroadcastJob,
+  createIncidentEvent,
+  createSubscriptionOrder,
   createAuditLog,
   createPaymentEvent,
   deletePlan,
   deleteSubscriptionByUserId,
   getOrCreateUser,
   getInstruction,
+  getUserBalance,
   getIntegrationSetting,
   getPlan,
   getSubscriptionProfile,
@@ -15,8 +20,13 @@ import {
   healthCheck,
   listAuditLogs,
   listInstructions,
+  listBroadcastJobs,
+  listCampaigns,
+  listChannelPolicies,
+  listIncidentEvents,
   listPaymentEventsByUser,
   listPlans,
+  listPromoCodes,
   listSubscriptionProfiles,
   listSubscriptions,
   listUsers,
@@ -24,14 +34,17 @@ import {
   markUserTrialUnused,
   setUserPreferredLanguage,
   setIntegrationSetting,
+  upsertCampaign,
+  upsertChannelPolicy,
+  upsertPromoCode,
   upsertSubscriptionProfile,
   upsertPlan,
   upsertInstruction,
   upsertSubscription
 } from "@simple-pasarbot/db";
 import { canStartTrial, evaluateSubscription, shouldBlockForTraffic } from "@simple-pasarbot/domain";
-import { getBaseInfo, syncUser } from "@simple-pasarbot/pasarguard";
-import { buildPaymentRequest, createInvoice, verifyWebhookSignature } from "@simple-pasarbot/platega";
+import { deleteUser, getBaseInfo, resumeUser, suspendUser, syncUser, updateUserLimits } from "@simple-pasarbot/pasarguard";
+import { getProviderAdapter } from "@simple-pasarbot/payment-hub";
 import { normalizeLang, requestLang, t } from "./i18n.js";
 import {
   createUserFromTemplate,
@@ -279,7 +292,8 @@ app.post("/payments/webhook", express.raw({ type: "*/*" }), async (req, res) => 
   const lang = normalizeLang(req.headers["x-lang"]);
   const signature = req.headers["x-signature"];
   const rawBody = req.body.toString("utf8");
-  if (!verifyWebhookSignature(rawBody, String(signature || ""), cfg.webhookSecret)) {
+  const paymentAdapter = getProviderAdapter("generic");
+  if (!paymentAdapter.verifyWebhook(rawBody, String(signature || ""), cfg.webhookSecret)) {
     return res.status(401).json({ error: t(lang, "invalidSignature") });
   }
 
@@ -419,7 +433,8 @@ app.post("/payments/create", async (req, res) => {
   }
   const user = await getOrCreateUser(userId);
   const profile = (await getSubscriptionProfile(planId || "m1")) || (await getSubscriptionProfile("m1"));
-  const payload = buildPaymentRequest({
+  const paymentAdapter = getProviderAdapter("generic");
+  const payload = paymentAdapter.createPayload({
     userId: String(user.telegramId),
     planId: profile?.id || "m1",
     amount: Number(amount || profile?.priceMinor || 0) / 100,
@@ -427,7 +442,7 @@ app.post("/payments/create", async (req, res) => {
   });
   let invoice = null;
   if (cfg.paymentApiKey) {
-    invoice = await createInvoice(cfg.paymentApiKey, payload).catch(() => null);
+    invoice = await paymentAdapter.createInvoice(cfg.paymentApiKey, payload).catch(() => null);
   }
   await createPaymentEvent({
     userId: user.id,
@@ -639,6 +654,40 @@ app.get("/admin/pasarguard/panel_status", async (_req, res) => {
   }
 });
 
+app.post("/admin/pasarguard/user_action", async (req, res) => {
+  const { username, action, limits } = req.body;
+  const runtime = await getPasarRuntimeConfig();
+  if (!runtime.nodeApiBaseUrl || !runtime.apiKey) {
+    return res.status(400).json({ error: "node api is not configured" });
+  }
+  if (!username || !action) {
+    return res.status(400).json({ error: "username and action are required" });
+  }
+  if (action === "suspend") {
+    await suspendUser(runtime.nodeApiBaseUrl, runtime.apiKey, username);
+  } else if (action === "resume") {
+    await resumeUser(runtime.nodeApiBaseUrl, runtime.apiKey, username);
+  } else if (action === "delete") {
+    await deleteUser(runtime.nodeApiBaseUrl, runtime.apiKey, username);
+  } else if (action === "limits") {
+    await updateUserLimits(runtime.nodeApiBaseUrl, runtime.apiKey, username, limits || {});
+  } else {
+    return res.status(400).json({ error: "unsupported action" });
+  }
+  await createAuditLog({ actor: "admin", action: `pasar.user.${action}`, target: `pasar:${username}`, meta: { limits } });
+  return res.json({ ok: true });
+});
+
+app.post("/admin/pasarguard/reconcile", async (_req, res) => {
+  const subscriptions = await listSubscriptions();
+  const reconciled = [];
+  for (const sub of subscriptions) {
+    reconciled.push({ userId: sub.userId, remoteUsername: sub.remoteUsername, status: sub.status });
+  }
+  await createIncidentEvent({ level: "info", source: "pasarguard", message: "reconcile_completed", meta: { count: reconciled.length } });
+  return res.json({ ok: true, reconciled });
+});
+
 app.post("/admin/pasarguard/connect", async (req, res) => {
   const lang = requestLang(req);
   const {
@@ -744,6 +793,190 @@ app.delete("/admin/subscriptions/:userId", async (req, res) => {
   await markUserTrialUnused(userId);
   await createAuditLog({ actor: "admin", action: "subscription.delete", target: `subscription:${userId}`, before: sub });
   return res.json({ ok: true });
+});
+
+app.get("/wallet/:telegramId", async (req, res) => {
+  const user = await getOrCreateUser(String(req.params.telegramId));
+  const balanceMinor = await getUserBalance(user.id);
+  res.json({ telegramId: user.telegramId, balanceMinor, currency: "RUB" });
+});
+
+app.post("/wallet/topup", async (req, res) => {
+  const { telegramId, amountMinor, source = "manual" } = req.body;
+  const user = await getOrCreateUser(String(telegramId));
+  const entry = await createBalanceEntry({
+    userId: user.id,
+    entryType: "topup",
+    amountMinor: Number(amountMinor || 0),
+    source
+  });
+  res.json({ ok: true, entry, balanceMinor: await getUserBalance(user.id) });
+});
+
+app.post("/orders/create", async (req, res) => {
+  const { telegramId, profileId, idempotencyKey, promoCode } = req.body;
+  if (!telegramId || !profileId) {
+    return res.status(400).json({ error: "telegramId and profileId are required" });
+  }
+  const user = await getOrCreateUser(String(telegramId));
+  const profile = await getSubscriptionProfile(profileId);
+  if (!profile) {
+    return res.status(404).json({ error: "profile_not_found" });
+  }
+  const promos = await listPromoCodes();
+  const promo = promos.find((p) => p.code === promoCode && p.active);
+  let amountMinor = Number(profile.priceMinor || 0);
+  if (promo?.kind === "amount" && promo.valueMinor) {
+    amountMinor = Math.max(0, amountMinor - Number(promo.valueMinor));
+  }
+  const order = await createSubscriptionOrder({
+    userId: user.id,
+    profileId: profile.id,
+    status: "created",
+    amountMinor,
+    currency: profile.currency || "RUB",
+    idempotencyKey
+  });
+  res.json({ ok: true, order, appliedPromo: promo || null });
+});
+
+app.get("/miniapp/catalog", async (_req, res) => {
+  const profiles = await listSubscriptionProfiles();
+  res.json({ profiles: profiles.filter((p) => p.active) });
+});
+
+app.post("/landing/checkout", async (req, res) => {
+  const { telegramId, profileId, utm = {} } = req.body;
+  const user = await getOrCreateUser(String(telegramId));
+  const profile = await getSubscriptionProfile(profileId || "m1");
+  if (!profile) {
+    return res.status(404).json({ error: "profile_not_found" });
+  }
+  const order = await createSubscriptionOrder({
+    userId: user.id,
+    profileId: profile.id,
+    status: "created",
+    amountMinor: Number(profile.priceMinor || 0),
+    currency: profile.currency || "RUB"
+  });
+  await createIncidentEvent({ level: "info", source: "landing", message: "checkout_created", meta: { orderId: order.id, utm } });
+  res.json({ order });
+});
+
+app.post("/gifts/create", async (req, res) => {
+  const { fromTelegramId, toTelegramId, profileId = "m1" } = req.body;
+  const fromUser = await getOrCreateUser(String(fromTelegramId));
+  const toUser = await getOrCreateUser(String(toTelegramId));
+  const profile = await getSubscriptionProfile(profileId);
+  if (!profile) {
+    return res.status(404).json({ error: "profile_not_found" });
+  }
+  const order = await createSubscriptionOrder({
+    userId: fromUser.id,
+    profileId: profile.id,
+    status: "gift_created",
+    amountMinor: Number(profile.priceMinor || 0),
+    currency: profile.currency || "RUB"
+  });
+  await createAuditLog({
+    actor: `user:${fromUser.telegramId}`,
+    action: "gift.create",
+    target: `user:${toUser.telegramId}`,
+    meta: { orderId: order.id, profileId }
+  });
+  res.json({ ok: true, giftOrder: order });
+});
+
+app.get("/admin/promos", async (_req, res) => {
+  res.json({ data: await listPromoCodes() });
+});
+
+app.post("/admin/promos", async (req, res) => {
+  const saved = await upsertPromoCode(req.body);
+  await createAuditLog({ actor: "admin", action: "promo.upsert", target: `promo:${saved.code}`, after: saved });
+  res.json({ promo: saved });
+});
+
+app.get("/admin/campaigns", async (_req, res) => {
+  res.json({ data: await listCampaigns() });
+});
+
+app.post("/admin/campaigns", async (req, res) => {
+  const saved = await upsertCampaign(req.body);
+  await createAuditLog({ actor: "admin", action: "campaign.upsert", target: `campaign:${saved.id}`, after: saved });
+  res.json({ campaign: saved });
+});
+
+app.post("/admin/broadcasts", async (req, res) => {
+  const job = await createBroadcastJob({
+    campaignId: req.body?.campaignId || null,
+    status: "pending",
+    payload: req.body?.payload || {}
+  });
+  res.json({ job });
+});
+
+app.get("/admin/broadcasts", async (req, res) => {
+  res.json({ data: await listBroadcastJobs(Number(req.query.limit || 50)) });
+});
+
+app.get("/admin/channel-policies", async (_req, res) => {
+  res.json({ data: await listChannelPolicies() });
+});
+
+app.post("/admin/channel-policies", async (req, res) => {
+  const saved = await upsertChannelPolicy(req.body);
+  await createAuditLog({ actor: "admin", action: "channel_policy.upsert", target: `policy:${saved.code}`, after: saved });
+  res.json({ policy: saved });
+});
+
+app.get("/admin/incidents", async (req, res) => {
+  res.json({ data: await listIncidentEvents(Number(req.query.limit || 100)) });
+});
+
+app.post("/admin/incidents", async (req, res) => {
+  const event = await createIncidentEvent(req.body);
+  res.json({ event });
+});
+
+app.get("/admin/analytics/summary", async (_req, res) => {
+  const subscriptions = await listSubscriptions();
+  const payments = await listPaymentEventsByUser((await listUsers())[0]?.id || "");
+  const active = subscriptions.filter((s) => s.status === "active").length;
+  const blocked = subscriptions.filter((s) => s.status === "blocked").length;
+  res.json({
+    mrrEstimateMinor: subscriptions.reduce((sum, s) => sum + (s.isTrial ? 0 : 49900), 0),
+    activeSubscriptions: active,
+    blockedSubscriptions: blocked,
+    samplePayments: payments.length
+  });
+});
+
+app.get("/admin/rbac/config", async (_req, res) => {
+  const data = (await getIntegrationSetting("rbac"))?.value || {
+    roles: [{ code: "owner", permissions: ["*"] }],
+    permissions: []
+  };
+  res.json({ data });
+});
+
+app.post("/admin/rbac/config", async (req, res) => {
+  const payload = req.body || {};
+  await setIntegrationSetting("rbac", payload);
+  await createAuditLog({ actor: "admin", action: "rbac.config", target: "rbac", after: payload });
+  res.json({ ok: true, data: payload });
+});
+
+app.get("/admin/ops/maintenance", async (_req, res) => {
+  const data = (await getIntegrationSetting("maintenance"))?.value || { enabled: false, message: "" };
+  res.json({ data });
+});
+
+app.post("/admin/ops/maintenance", async (req, res) => {
+  const payload = { enabled: Boolean(req.body?.enabled), message: String(req.body?.message || "") };
+  await setIntegrationSetting("maintenance", payload);
+  await createIncidentEvent({ level: "warning", source: "admin", message: "maintenance_updated", meta: payload });
+  res.json({ ok: true, data: payload });
 });
 
 app.listen(cfg.port, () => {

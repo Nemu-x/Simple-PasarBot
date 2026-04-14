@@ -51,3 +51,39 @@ export async function getUserStats(baseUrl, apiKey, statRequest) {
   });
   return response.json().catch(() => ({}));
 }
+
+export async function suspendUser(baseUrl, apiKey, username) {
+  const response = await safeFetch(`${baseUrl}/user/${encodeURIComponent(username)}/suspend`, {
+    method: "POST",
+    headers: authHeaders(apiKey)
+  });
+  return response.text();
+}
+
+export async function resumeUser(baseUrl, apiKey, username) {
+  const response = await safeFetch(`${baseUrl}/user/${encodeURIComponent(username)}/resume`, {
+    method: "POST",
+    headers: authHeaders(apiKey)
+  });
+  return response.text();
+}
+
+export async function deleteUser(baseUrl, apiKey, username) {
+  const response = await safeFetch(`${baseUrl}/user/${encodeURIComponent(username)}`, {
+    method: "DELETE",
+    headers: authHeaders(apiKey)
+  });
+  return response.text();
+}
+
+export async function updateUserLimits(baseUrl, apiKey, username, payload) {
+  const response = await safeFetch(`${baseUrl}/user/${encodeURIComponent(username)}/limits`, {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(apiKey),
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload || {})
+  });
+  return response.text();
+}
