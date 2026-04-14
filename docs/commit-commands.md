@@ -20,7 +20,7 @@ git push
 
 ```bash
 git add packages/integrations/pasarguard packages/integrations/platega
-git commit -m "feat: integrate pasarguard and platega adapters"
+git commit -m "feat: integrate pasarguard and payment adapters"
 git push
 ```
 

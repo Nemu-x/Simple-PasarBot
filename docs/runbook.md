@@ -20,6 +20,17 @@
 - PostgreSQL volume: `pgdata`.
 - Recommend daily dump:
   - `docker exec <db_container> pg_dump -U $POSTGRES_USER $POSTGRES_DB > backup.sql`
+- Restore drill:
+  - `cat backup.sql | docker exec -i <db_container> psql -U $POSTGRES_USER -d $POSTGRES_DB`
+
+## Audit and monitoring
+
+- Audit API endpoint:
+  - `GET /admin/audit?limit=100`
+- Key alerts to watch:
+  - failed `POST /trial/start`
+  - failed payment webhook signature validation
+  - PasarGuard template create errors
 
 ## Production server checklist (Hostinger VPS)
 
@@ -30,7 +41,7 @@
 5. Run stack with:
    - `docker compose -f deploy/docker-compose.yml up -d --build`
 6. Put reverse proxy (Nginx/Caddy/Traefik) in front of `api:8080` and issue TLS cert.
-7. Configure Platega webhook URL to:
+7. Configure payment provider webhook URL to:
    - `https://<your-domain>/payments/webhook`
 8. For this repo (Nginx + Certbot):
    - `docker compose -f deploy/docker-compose.yml up -d --build`

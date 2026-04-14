@@ -16,7 +16,7 @@ export function buildPaymentRequest({ userId, planId, amount, callbackUrl }) {
 }
 
 export async function createInvoice(apiKey, payload) {
-  const baseUrl = process.env.PAYMENT_API_BASE_URL || "https://platega.io/api";
+  const baseUrl = process.env.PAYMENT_API_BASE_URL || "https://payment-provider.example/api";
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/payments`, {
     method: "POST",
     headers: {

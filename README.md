@@ -11,8 +11,8 @@ MVP for Telegram VPN subscriptions with PasarGuard integration.
    - `BOT_TOKEN`
    - `PASARGUARD_BASE_URL`
    - `PASARGUARD_API_KEY`
-   - `PLATEGA_API_KEY`
-   - `PLATEGA_WEBHOOK_SECRET`
+   - `PAYMENT_API_KEY`
+   - `PAYMENT_WEBHOOK_SECRET`
    - `DOMAIN`
    - `CERTBOT_EMAIL`
 2. Start stack:
@@ -21,12 +21,15 @@ MVP for Telegram VPN subscriptions with PasarGuard integration.
    - `https://<your-domain>/health`
 4. Admin web:
    - `https://<your-domain>/admin/`
+5. Mini App web entry:
+   - `https://<your-domain>/app/`
 
 Admin security env (recommended):
 - `ADMIN_WEB_PASSWORD_HASH` (bcrypt hash)
 - `ADMIN_SESSION_SECRET` (long random)
 - `ADMIN_SESSION_TTL_HOURS`
 - `ADMIN_SECURE_COOKIE=true`
+- `ADMIN_API_TOKEN` (shared between admin-web and api)
 
 PostgreSQL migrations are applied automatically by API container startup (`npm run migrate`).
 
@@ -57,7 +60,14 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 - `POST /users/language`
 - `POST /payments/create`
 - `POST /payments/webhook`
+- `GET /profiles`
+- `POST /subscriptions/create`
+- `POST /subscriptions/renew`
+- `POST /subscriptions/change-profile`
 - `GET /admin/subscriptions`
+- `GET /admin/profiles`
+- `POST /admin/profiles`
+- `GET /admin/audit`
 - `POST /admin/subscriptions/reconcile`
 - `GET /admin/instructions`
 - `POST /admin/instructions`
