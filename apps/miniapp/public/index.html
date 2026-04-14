@@ -19,6 +19,7 @@
   <div class="card"><h2>Subscription</h2><pre id="subscription"></pre></div>
   <div class="card"><h2>Profile</h2><pre id="profile"></pre></div>
   <div class="card"><h2>Payments</h2><pre id="payments"></pre></div>
+  <div class="card"><h2>Catalog</h2><pre id="catalog"></pre></div>
   <div class="card">
     <h2>Renew</h2>
     <button data-profile="m1">Renew 1M</button>
@@ -26,6 +27,17 @@
     <button data-profile="m6">Renew 6M</button>
     <button data-profile="m12">Renew 12M</button>
     <pre id="renew-out"></pre>
+  </div>
+  <div class="card">
+    <h2>Gift Subscription</h2>
+    <input id="gift-to" placeholder="Receiver Telegram ID">
+    <button id="gift-send">Send gift m1</button>
+    <pre id="gift-out"></pre>
+  </div>
+  <div class="card">
+    <h2>Guest Checkout</h2>
+    <button id="guest-checkout">Create guest order m1</button>
+    <pre id="guest-out"></pre>
   </div>
   <script>
     let currentTelegramId = null;
@@ -44,6 +56,8 @@
       document.getElementById("profile").textContent = JSON.stringify(payload.profile || null, null, 2);
       document.getElementById("payments").textContent = JSON.stringify(payload.payments || [], null, 2);
       currentTelegramId = payload.user?.telegramId || null;
+      const catalog = await fetch("/catalog").then((r) => r.json()).catch(() => ({}));
+      document.getElementById("catalog").textContent = JSON.stringify(catalog.profiles || [], null, 2);
     }
     document.querySelectorAll("button[data-profile]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -59,6 +73,25 @@
           await load();
         }
       });
+    });
+    document.getElementById("gift-send").addEventListener("click", async () => {
+      if (!currentTelegramId) return;
+      const to = document.getElementById("gift-to").value.trim();
+      const response = await fetch("/gifts/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromTelegramId: currentTelegramId, toTelegramId: to, profileId: "m1" })
+      });
+      document.getElementById("gift-out").textContent = JSON.stringify(await response.json(), null, 2);
+    });
+    document.getElementById("guest-checkout").addEventListener("click", async () => {
+      if (!currentTelegramId) return;
+      const response = await fetch("/landing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId: currentTelegramId, profileId: "m1", utm: { source: "miniapp" } })
+      });
+      document.getElementById("guest-out").textContent = JSON.stringify(await response.json(), null, 2);
     });
     load();
   </script>

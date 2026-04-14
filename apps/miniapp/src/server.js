@@ -38,6 +38,32 @@ app.post("/renew", async (req, res) => {
   return res.status(response.status).json(payload);
 });
 
+app.get("/catalog", async (_req, res) => {
+  const response = await fetch(`${cfg.apiBase}/miniapp/catalog`);
+  const payload = await response.json().catch(() => ({}));
+  return res.status(response.status).json(payload);
+});
+
+app.post("/gifts/create", async (req, res) => {
+  const response = await fetch(`${cfg.apiBase}/gifts/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req.body || {})
+  });
+  const payload = await response.json().catch(() => ({}));
+  return res.status(response.status).json(payload);
+});
+
+app.post("/landing/checkout", async (req, res) => {
+  const response = await fetch(`${cfg.apiBase}/landing/checkout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req.body || {})
+  });
+  const payload = await response.json().catch(() => ({}));
+  return res.status(response.status).json(payload);
+});
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
