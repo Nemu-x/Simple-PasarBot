@@ -1,7 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 
 const token = process.env.BOT_TOKEN;
-const apiBase = process.env.APP_BASE_URL || "http://localhost:8080";
+const apiBase = process.env.API_INTERNAL_URL || process.env.APP_BASE_URL || "http://localhost:8080";
 
 if (!token || token === "change_me") {
   console.log("BOT_TOKEN missing, bot is not started.");

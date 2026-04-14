@@ -1,8 +1,6 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY package.json ./
-COPY apps/bot/package.json apps/bot/package.json
-RUN npm install
 COPY . .
+RUN npm install
 WORKDIR /app/apps/bot
 CMD ["npm", "run", "dev"]
