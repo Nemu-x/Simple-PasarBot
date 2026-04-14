@@ -22,7 +22,7 @@ export async function closeDb() {
 export async function getOrCreateUser(telegramId) {
   const key = String(telegramId);
   const existing = await pool.query(
-    "SELECT id, telegram_id AS \"telegramId\", has_used_trial AS \"hasUsedTrial\", created_at AS \"createdAt\" FROM users WHERE telegram_id = $1",
+    "SELECT id, telegram_id AS \"telegramId\", has_used_trial AS \"hasUsedTrial\", preferred_language AS \"preferredLanguage\", created_at AS \"createdAt\" FROM users WHERE telegram_id = $1",
     [key]
   );
   if (existing.rowCount) {
@@ -30,7 +30,7 @@ export async function getOrCreateUser(telegramId) {
   }
 
   const created = await pool.query(
-    "INSERT INTO users (id, telegram_id) VALUES ($1, $2) RETURNING id, telegram_id AS \"telegramId\", has_used_trial AS \"hasUsedTrial\", created_at AS \"createdAt\"",
+    "INSERT INTO users (id, telegram_id) VALUES ($1, $2) RETURNING id, telegram_id AS \"telegramId\", has_used_trial AS \"hasUsedTrial\", preferred_language AS \"preferredLanguage\", created_at AS \"createdAt\"",
     [randomUUID(), key]
   );
   return created.rows[0];
@@ -38,6 +38,18 @@ export async function getOrCreateUser(telegramId) {
 
 export async function markUserTrialUsed(userId) {
   await pool.query("UPDATE users SET has_used_trial = TRUE WHERE id = $1", [userId]);
+}
+
+export async function setUserPreferredLanguage(telegramId, preferredLanguage) {
+  const result = await pool.query(
+    `UPDATE users
+     SET preferred_language = $2
+     WHERE telegram_id = $1
+     RETURNING id, telegram_id AS "telegramId", has_used_trial AS "hasUsedTrial",
+      preferred_language AS "preferredLanguage", created_at AS "createdAt"`,
+    [String(telegramId), preferredLanguage]
+  );
+  return result.rows[0] || null;
 }
 
 export async function listPlans() {

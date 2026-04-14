@@ -7,11 +7,13 @@ import {
   listPlans,
   listSubscriptions,
   markUserTrialUsed,
+  setUserPreferredLanguage,
   upsertSubscription
 } from "@simple-pasarbot/db";
 import { canStartTrial, evaluateSubscription, shouldBlockForTraffic } from "@simple-pasarbot/domain";
 import { getBaseInfo, syncUser } from "@simple-pasarbot/pasarguard";
 import { buildPaymentRequest, verifyWebhookSignature } from "@simple-pasarbot/platega";
+import { normalizeLang, requestLang, t } from "./i18n.js";
 
 const app = express();
 
@@ -30,10 +32,11 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/payments/webhook", express.raw({ type: "*/*" }), async (req, res) => {
+  const lang = normalizeLang(req.headers["x-lang"]);
   const signature = req.headers["x-signature"];
   const rawBody = req.body.toString("utf8");
   if (!verifyWebhookSignature(rawBody, String(signature || ""), cfg.webhookSecret)) {
-    return res.status(401).json({ error: "invalid signature" });
+    return res.status(401).json({ error: t(lang, "invalidSignature") });
   }
 
   const event = JSON.parse(rawBody);
@@ -56,21 +59,22 @@ app.get("/plans", async (_req, res) => {
 });
 
 app.post("/trial/start", async (req, res) => {
+  const lang = requestLang(req);
   const { telegramId, channelMember = true, nodeTemplate = "no-whitelist" } = req.body;
   if (!telegramId) {
-    return res.status(400).json({ error: "telegramId is required" });
+    return res.status(400).json({ error: t(lang, "telegramRequired") });
   }
   if (!channelMember) {
-    return res.status(403).json({ error: "channel subscription required" });
+    return res.status(403).json({ error: t(lang, "channelRequired") });
   }
 
   const user = await getOrCreateUser(telegramId);
   if (!canStartTrial(user)) {
-    return res.status(409).json({ error: "trial already used" });
+    return res.status(409).json({ error: t(lang, "trialUsed") });
   }
   const trial = await getPlan("trial");
   if (!trial) {
-    return res.status(500).json({ error: "trial plan is not configured" });
+    return res.status(500).json({ error: t(lang, "trialMissing") });
   }
   const startsAt = new Date();
   const expiresAt = new Date(startsAt.getTime() + trial.days * 24 * 60 * 60 * 1000);
@@ -108,6 +112,16 @@ app.get("/cabinet/:telegramId", async (req, res) => {
   res.json({ user, subscription, status });
 });
 
+app.post("/users/language", async (req, res) => {
+  const { telegramId, lang } = req.body;
+  if (!telegramId) {
+    return res.status(400).json({ error: t(requestLang(req), "telegramRequired") });
+  }
+  await getOrCreateUser(telegramId);
+  const saved = await setUserPreferredLanguage(telegramId, normalizeLang(lang));
+  return res.json({ user: saved, message: t(saved?.preferredLanguage || "en", "languageUpdated") });
+});
+
 app.post("/payments/create", (req, res) => {
   const { userId, planId, amount } = req.body;
   const payload = buildPaymentRequest({
@@ -124,18 +138,20 @@ app.get("/admin/subscriptions", async (_req, res) => {
 });
 
 app.get("/admin/pasarguard/info", async (_req, res) => {
+  const lang = requestLang(_req);
   if (!cfg.pasarguardBaseUrl || !cfg.pasarguardApiKey) {
-    return res.status(400).json({ error: "PasarGuard config missing" });
+    return res.status(400).json({ error: t(lang, "pasarMissing") });
   }
   const info = await getBaseInfo(cfg.pasarguardBaseUrl, cfg.pasarguardApiKey);
   return res.json({ info });
 });
 
 app.post("/admin/subscriptions/reconcile", async (req, res) => {
+  const lang = requestLang(req);
   const { userId, trafficUsedBytes } = req.body;
   const sub = await getSubscriptionByUserId(userId);
   if (!sub) {
-    return res.status(404).json({ error: "subscription not found" });
+    return res.status(404).json({ error: t(lang, "subscriptionNotFound") });
   }
   if (shouldBlockForTraffic(sub, Number(trafficUsedBytes || 0))) {
     sub.blocked = true;
