@@ -40,6 +40,10 @@ export async function markUserTrialUsed(userId) {
   await pool.query("UPDATE users SET has_used_trial = TRUE WHERE id = $1", [userId]);
 }
 
+export async function markUserTrialUnused(userId) {
+  await pool.query("UPDATE users SET has_used_trial = FALSE WHERE id = $1", [userId]);
+}
+
 export async function setUserPreferredLanguage(telegramId, preferredLanguage) {
   const result = await pool.query(
     `UPDATE users

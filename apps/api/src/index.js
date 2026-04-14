@@ -14,6 +14,7 @@ import {
   listSubscriptions,
   listUsers,
   markUserTrialUsed,
+  markUserTrialUnused,
   setUserPreferredLanguage,
   setIntegrationSetting,
   upsertPlan,
@@ -113,7 +114,15 @@ async function getPasarRuntimeConfig() {
 }
 
 async function instructionBundle(lang, subscriptionUrl, platform = "universal") {
-  const instruction = await getInstruction("connect_vpn", lang, platform);
+  const instruction =
+    (await getInstruction("connect_vpn", lang, platform)) ||
+    {
+      title: lang === "ru" ? "Как подключиться" : "How to connect",
+      body:
+        lang === "ru"
+          ? "Скопируйте ссылку подписки и импортируйте ее в VPN-клиент."
+          : "Copy subscription URL and import it into your VPN client."
+    };
   const qrDataUrl = subscriptionUrl ? await QRCode.toDataURL(subscriptionUrl, { width: 320, margin: 1 }) : null;
   return {
     instruction,
@@ -400,7 +409,10 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
     noWlInbounds,
     wlTemplateId,
     noWlTemplateId,
-    trialTemplateId
+    trialTemplateId,
+    wlTemplateName,
+    noWlTemplateName,
+    trialTemplateName
   } = req.body;
 
   let apiKey = directApiKey || "";
@@ -416,6 +428,23 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
     }
   }
 
+  let resolvedWlTemplateId = wlTemplateId || null;
+  let resolvedNoWlTemplateId = noWlTemplateId || null;
+  let resolvedTrialTemplateId = trialTemplateId || null;
+
+  if ((!resolvedWlTemplateId && wlTemplateName) || (!resolvedNoWlTemplateId && noWlTemplateName) || (!resolvedTrialTemplateId && trialTemplateName)) {
+    try {
+      const token = await fetchAdminToken(panelUrl, username, password);
+      const templates = await getUserTemplates(panelUrl, token);
+      const byName = new Map((templates || []).map((item) => [String(item.name || ""), item.id]));
+      resolvedWlTemplateId = resolvedWlTemplateId || byName.get(String(wlTemplateName || "")) || null;
+      resolvedNoWlTemplateId = resolvedNoWlTemplateId || byName.get(String(noWlTemplateName || "")) || null;
+      resolvedTrialTemplateId = resolvedTrialTemplateId || byName.get(String(trialTemplateName || "")) || null;
+    } catch (_error) {
+      // keep unresolved values
+    }
+  }
+
   const payload = {
     panelUrl: panelUrl || null,
     nodeApiBaseUrl: nodeApiBaseUrl || null,
@@ -427,9 +456,12 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
     noWlTemplateUser: noWlTemplateUser || null,
     wlInbounds: wlInbounds || null,
     noWlInbounds: noWlInbounds || null,
-    wlTemplateId: wlTemplateId || null,
-    noWlTemplateId: noWlTemplateId || null,
-    trialTemplateId: trialTemplateId || null,
+    wlTemplateId: resolvedWlTemplateId,
+    noWlTemplateId: resolvedNoWlTemplateId,
+    trialTemplateId: resolvedTrialTemplateId,
+    wlTemplateName: wlTemplateName || null,
+    noWlTemplateName: noWlTemplateName || null,
+    trialTemplateName: trialTemplateName || null,
     autoDetected,
     detectedFrom
   };
@@ -463,6 +495,7 @@ app.delete("/admin/subscriptions/:userId", async (req, res) => {
     }
   }
   await deleteSubscriptionByUserId(userId);
+  await markUserTrialUnused(userId);
   return res.json({ ok: true });
 });
 

@@ -18,3 +18,6 @@ table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
 th, td { border:1px solid #2a3a69; padding:8px; text-align:left; vertical-align:top; }
 thead { background:#152044; }
 pre { background:#0d1530; border:1px solid #2a3a69; padding:10px; border-radius:8px; overflow:auto; }
+.status-badge { display:inline-block; margin-left:8px; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; vertical-align:middle; }
+.status-green { background:#153f2a; color:#7bf0ac; border:1px solid #2f8d5c; }
+.status-red { background:#3d1a1a; color:#ff9a9a; border:1px solid #9a4040; }

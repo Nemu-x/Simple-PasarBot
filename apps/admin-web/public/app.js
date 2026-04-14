@@ -1,5 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
+let pasarTemplates = [];
 
 async function getJson(path) {
   const r = await fetch(`api/proxy/${path}`);
@@ -39,8 +40,13 @@ $("#refresh-dashboard").onclick = refreshDashboard;
 $("#pasar-form").onsubmit = async (e) => {
   e.preventDefault();
   const payload = Object.fromEntries(new FormData(e.target).entries());
+  const nameToId = new Map((pasarTemplates || []).map((t) => [String(t.name || ""), t.id]));
+  payload.wlTemplateId = payload.wlTemplateName ? nameToId.get(payload.wlTemplateName) || null : null;
+  payload.noWlTemplateId = payload.noWlTemplateName ? nameToId.get(payload.noWlTemplateName) || null : null;
+  payload.trialTemplateId = payload.trialTemplateName ? nameToId.get(payload.trialTemplateName) || null : null;
   const out = await postJson("admin/pasarguard/connect", payload);
   $("#pasar-out").textContent = JSON.stringify(out, null, 2);
+  await refreshPasarStatus();
 };
 
 async function refreshPasarSettings() {
@@ -54,9 +60,6 @@ async function refreshPasarSettings() {
     "username",
     "wlTemplateUser",
     "noWlTemplateUser",
-    "wlTemplateId",
-    "noWlTemplateId",
-    "trialTemplateId",
     "wlInbounds",
     "noWlInbounds"
   ].forEach((key) => {
@@ -69,9 +72,30 @@ async function refreshPasarSettings() {
 
 async function refreshPasarTemplates() {
   const out = await getJson("admin/pasarguard/templates");
+  pasarTemplates = out?.templates || [];
+  ["wlTemplateName", "noWlTemplateName", "trialTemplateName"].forEach((name) => {
+    const select = $(`#pasar-form select[name='${name}']`);
+    if (!select) return;
+    select.innerHTML = "<option value=''>Select template</option>";
+    pasarTemplates.forEach((t) => {
+      const option = document.createElement("option");
+      option.value = String(t.name || "");
+      option.textContent = `${t.name} (#${t.id})`;
+      select.appendChild(option);
+    });
+  });
   $("#pasar-templates-out").textContent = JSON.stringify(out, null, 2);
 }
 $("#refresh-pasar-templates").onclick = refreshPasarTemplates;
+
+async function refreshPasarStatus() {
+  const badge = $("#pasar-status");
+  const out = await getJson("admin/pasarguard/info");
+  const ok = Boolean(out?.info);
+  badge.textContent = ok ? "Connected" : "Disconnected";
+  badge.classList.toggle("status-green", ok);
+  badge.classList.toggle("status-red", !ok);
+}
 
 async function refreshPlans() {
   const out = await getJson("plans");
@@ -148,4 +172,13 @@ async function refreshSubs() {
 }
 $("#refresh-subs").onclick = refreshSubs;
 
-Promise.all([refreshDashboard(), refreshPlans(), refreshInstructions(), refreshUsers(), refreshSubs(), refreshPasarSettings()]);
+Promise.all([
+  refreshDashboard(),
+  refreshPlans(),
+  refreshInstructions(),
+  refreshUsers(),
+  refreshSubs(),
+  refreshPasarSettings(),
+  refreshPasarTemplates(),
+  refreshPasarStatus()
+]);

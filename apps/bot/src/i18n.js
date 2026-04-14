@@ -1,6 +1,6 @@
 const dict = {
   en: {
-    welcome: "Welcome to Simple PasarBot.\n1) /trial - get a trial\n2) /cabinet - show subscription status\n3) /buy - create payment request\n4) /instructions - choose client guide\n5) /lang ru|en - switch language",
+    welcome: "Choose an action from buttons.",
     languageChanged: "Language changed to English.",
     langHelp: "Use /lang ru or /lang en",
     paymentCreated: "Payment created:",
@@ -30,7 +30,7 @@ const dict = {
     }
   },
   ru: {
-    welcome: "Добро пожаловать в Simple PasarBot.\n1) /trial - получить триал\n2) /cabinet - статус подписки\n3) /buy - создать оплату\n4) /instructions - выбрать инструкцию\n5) /lang ru|en - сменить язык",
+    welcome: "Выберите действие кнопками ниже.",
     languageChanged: "Язык переключен на русский.",
     langHelp: "Используй /lang ru или /lang en",
     paymentCreated: "Платеж создан:",
