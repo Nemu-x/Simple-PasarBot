@@ -238,3 +238,138 @@ export async function getIntegrationSetting(key) {
   );
   return result.rows[0] || null;
 }
+
+export async function listSubscriptionProfiles() {
+  const result = await pool.query(
+    `SELECT id, name, duration_days AS "durationDays", traffic_limit_bytes AS "trafficLimitBytes",
+      price_minor AS "priceMinor", currency, is_trial AS "isTrial",
+      require_channel_member AS "requireChannelMember", node_template AS "nodeTemplate",
+      pasar_template_id AS "pasarTemplateId", active, created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM subscription_profiles
+     ORDER BY duration_days ASC`
+  );
+  return result.rows;
+}
+
+export async function getSubscriptionProfile(profileId) {
+  const result = await pool.query(
+    `SELECT id, name, duration_days AS "durationDays", traffic_limit_bytes AS "trafficLimitBytes",
+      price_minor AS "priceMinor", currency, is_trial AS "isTrial",
+      require_channel_member AS "requireChannelMember", node_template AS "nodeTemplate",
+      pasar_template_id AS "pasarTemplateId", active, created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM subscription_profiles
+     WHERE id = $1`,
+    [profileId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function upsertSubscriptionProfile(profile) {
+  const result = await pool.query(
+    `INSERT INTO subscription_profiles (
+      id, name, duration_days, traffic_limit_bytes, price_minor, currency,
+      is_trial, require_channel_member, node_template, pasar_template_id, active, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      duration_days = EXCLUDED.duration_days,
+      traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
+      price_minor = EXCLUDED.price_minor,
+      currency = EXCLUDED.currency,
+      is_trial = EXCLUDED.is_trial,
+      require_channel_member = EXCLUDED.require_channel_member,
+      node_template = EXCLUDED.node_template,
+      pasar_template_id = EXCLUDED.pasar_template_id,
+      active = EXCLUDED.active,
+      updated_at = NOW()
+    RETURNING id, name, duration_days AS "durationDays", traffic_limit_bytes AS "trafficLimitBytes",
+      price_minor AS "priceMinor", currency, is_trial AS "isTrial",
+      require_channel_member AS "requireChannelMember", node_template AS "nodeTemplate",
+      pasar_template_id AS "pasarTemplateId", active, created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [
+      profile.id,
+      profile.name,
+      Number(profile.durationDays),
+      profile.trafficLimitBytes == null ? null : Number(profile.trafficLimitBytes),
+      Number(profile.priceMinor || 0),
+      profile.currency || "RUB",
+      Boolean(profile.isTrial),
+      Boolean(profile.requireChannelMember ?? true),
+      profile.nodeTemplate || "no-whitelist",
+      profile.pasarTemplateId == null ? null : Number(profile.pasarTemplateId),
+      Boolean(profile.active ?? true)
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function createPaymentEvent(payment) {
+  const result = await pool.query(
+    `INSERT INTO payment_events (
+      id, user_id, subscription_id, plan_id, provider, status, amount_minor, currency, external_id, idempotency_key, payload_json
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
+    ON CONFLICT (idempotency_key) DO UPDATE SET
+      status = EXCLUDED.status,
+      external_id = EXCLUDED.external_id,
+      payload_json = EXCLUDED.payload_json
+    RETURNING id, user_id AS "userId", subscription_id AS "subscriptionId", plan_id AS "planId",
+      provider, status, amount_minor AS "amountMinor", currency, external_id AS "externalId",
+      idempotency_key AS "idempotencyKey", payload_json AS "payload", created_at AS "createdAt"`,
+    [
+      payment.id || randomUUID(),
+      payment.userId,
+      payment.subscriptionId || null,
+      payment.planId || null,
+      payment.provider,
+      payment.status,
+      Number(payment.amountMinor || 0),
+      payment.currency || "RUB",
+      payment.externalId || null,
+      payment.idempotencyKey || randomUUID(),
+      JSON.stringify(payment.payload || {})
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function listPaymentEventsByUser(userId) {
+  const result = await pool.query(
+    `SELECT id, user_id AS "userId", subscription_id AS "subscriptionId", plan_id AS "planId",
+      provider, status, amount_minor AS "amountMinor", currency, external_id AS "externalId",
+      idempotency_key AS "idempotencyKey", payload_json AS "payload", created_at AS "createdAt"
+     FROM payment_events
+     WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function createAuditLog(entry) {
+  const result = await pool.query(
+    `INSERT INTO audit_logs (id, actor, action, target, before_json, after_json, meta_json)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb)
+     RETURNING id, actor, action, target, before_json AS "before", after_json AS "after", meta_json AS "meta", created_at AS "createdAt"`,
+    [
+      randomUUID(),
+      entry.actor || "system",
+      entry.action,
+      entry.target,
+      entry.before ? JSON.stringify(entry.before) : null,
+      entry.after ? JSON.stringify(entry.after) : null,
+      JSON.stringify(entry.meta || {})
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function listAuditLogs(limit = 100) {
+  const result = await pool.query(
+    `SELECT id, actor, action, target, before_json AS "before", after_json AS "after", meta_json AS "meta", created_at AS "createdAt"
+     FROM audit_logs
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [Number(limit)]
+  );
+  return result.rows;
+}
