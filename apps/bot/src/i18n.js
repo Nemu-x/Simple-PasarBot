@@ -35,6 +35,11 @@ const dict = {
     promoApplied: "Promo applied",
     promoInvalid: "Promo is invalid",
     supportText: "Support: @support",
+    channelCheckPrompt: "Channel subscription is required before trial.",
+    checkSubscription: "Check subscription",
+    subscriptionOk: "Subscription check passed. You can start trial.",
+    subscriptionMissing: "Still not subscribed to channel",
+    startHint: "Use buttons below to continue.",
     actions: {
       openCabinet: "Open cabinet",
       openPlans: "Plans and purchase",
@@ -89,6 +94,11 @@ const dict = {
     promoApplied: "Промокод применён",
     promoInvalid: "Промокод невалидный",
     supportText: "Поддержка: @support",
+    channelCheckPrompt: "Перед триалом нужна подписка на канал.",
+    checkSubscription: "Проверить подписку",
+    subscriptionOk: "Подписка подтверждена. Можно запускать триал.",
+    subscriptionMissing: "Подписка не найдена, подпишись на канал и проверь снова.",
+    startHint: "Используй кнопки ниже для продолжения.",
     actions: {
       openCabinet: "Открыть кабинет",
       openPlans: "Тарифы и покупка",

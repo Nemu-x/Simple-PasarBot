@@ -100,6 +100,12 @@ function onboardingKeyboard(lang) {
   };
 }
 
+function checkChannelKeyboard(lang) {
+  return {
+    inline_keyboard: [[{ text: t(lang, "checkSubscription"), callback_data: "check:channel" }]]
+  };
+}
+
 function plansKeyboard(lang, plans) {
   const rows = (plans || [])
     .filter((p) => !p.isTrial)
@@ -150,7 +156,14 @@ async function handleTrial(msg) {
     });
     const payload = await response.json();
     if (!response.ok) {
-      await bot.sendMessage(msg.chat.id, payload?.error || t(lang, "apiError"));
+      const errorText = payload?.error || t(lang, "apiError");
+      if (String(errorText).toLowerCase().includes("channel")) {
+        await bot.sendMessage(msg.chat.id, `${t(lang, "channelCheckPrompt")}\n${errorText}`, {
+          reply_markup: checkChannelKeyboard(lang)
+        });
+        return;
+      }
+      await bot.sendMessage(msg.chat.id, errorText);
       return;
     }
     await bot.sendMessage(msg.chat.id, payload?.message || t(lang, "trialCreated"));
@@ -243,12 +256,8 @@ bot.onText(/\/start/, async (msg) => {
   userLangCache.set(telegramId, detected);
   await saveLanguage(telegramId, detected);
   const lang = langForMessage(msg);
-  await bot.sendMessage(msg.chat.id, t(lang, "autoLanguageNotice"));
   await bot.sendMessage(msg.chat.id, t(lang, "chooseLanguage"), { reply_markup: languageKeyboard() });
-  await bot.sendMessage(msg.chat.id, t(lang, "welcome"), { reply_markup: mainKeyboard(lang) });
-  await bot.sendMessage(msg.chat.id, `${t(lang, "onboardingTitle")}\n${t(lang, "onboardingHint")}`, {
-    reply_markup: onboardingKeyboard(lang)
-  });
+  await bot.sendMessage(msg.chat.id, `${t(lang, "onboardingTitle")}\n${t(lang, "startHint")}`, { reply_markup: mainKeyboard(lang) });
 });
 
 bot.onText(/\/menu/, async (msg) => {
@@ -327,6 +336,22 @@ bot.on("callback_query", async (query) => {
       if (action === "plans") await handleBuy(msg);
       if (action === "cabinet") await handleCabinet(msg);
       if (action === "instructions") await handleInstructions(msg);
+      await bot.answerCallbackQuery(query.id);
+    }
+    if (data === "check:channel") {
+      const lang = normalizeLang(query.from.language_code);
+      const response = await fetch(`${apiBase}/channel/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId: String(query.from.id), lang })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (payload.member) {
+        await bot.sendMessage(query.message.chat.id, t(lang, "subscriptionOk"));
+      } else {
+        const channel = payload.channel ? ` (${payload.channel})` : "";
+        await bot.sendMessage(query.message.chat.id, `${t(lang, "subscriptionMissing")}${channel}`);
+      }
       await bot.answerCallbackQuery(query.id);
     }
     if (data.startsWith("buy:")) {

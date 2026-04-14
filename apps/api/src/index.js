@@ -359,6 +359,16 @@ app.get("/plans", async (_req, res) => {
   res.json({ plans: await listPlans() });
 });
 
+app.post("/channel/check", async (req, res) => {
+  const lang = requestLang(req);
+  const { telegramId } = req.body || {};
+  if (!telegramId) {
+    return res.status(400).json({ error: t(lang, "telegramRequired") });
+  }
+  const member = await checkChannelMembership(telegramId);
+  return res.json({ ok: true, member, channel: cfg.telegramChannel || null });
+});
+
 app.get("/profiles", async (_req, res) => {
   res.json({ profiles: await listSubscriptionProfiles() });
 });
