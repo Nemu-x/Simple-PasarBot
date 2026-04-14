@@ -16,6 +16,9 @@ const messages = {
     trialStarted: "trial started successfully",
     cabinetLoaded: "cabinet loaded",
     paymentPrepared: "payment request prepared"
+    ,
+    planSaved: "plan saved",
+    planDeleted: "plan deleted"
   },
   ru: {
     invalidSignature: "неверная подпись",
@@ -33,7 +36,9 @@ const messages = {
     instructionSaved: "инструкция сохранена",
     trialStarted: "триал успешно создан",
     cabinetLoaded: "кабинет загружен",
-    paymentPrepared: "запрос на оплату подготовлен"
+    paymentPrepared: "запрос на оплату подготовлен",
+    planSaved: "тариф сохранен",
+    planDeleted: "тариф удален"
   }
 };
 

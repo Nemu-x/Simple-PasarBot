@@ -1,6 +1,6 @@
 const dict = {
   en: {
-    welcome: "Welcome to Simple PasarBot.\n1) /trial - get a trial\n2) /cabinet - show subscription status\n3) /buy - create payment request\n4) /lang ru|en - switch language",
+    welcome: "Welcome to Simple PasarBot.\n1) /trial - get a trial\n2) /cabinet - show subscription status\n3) /buy - create payment request\n4) /instructions - choose client guide\n5) /lang ru|en - switch language",
     languageChanged: "Language changed to English.",
     langHelp: "Use /lang ru or /lang en",
     paymentCreated: "Payment created:",
@@ -13,10 +13,18 @@ const dict = {
     apiError: "Request failed, try again in a moment.",
     statusLabel: "Status",
     planLabel: "Plan",
-    expiresLabel: "Expires"
+    expiresLabel: "Expires",
+    choosePlatform: "Choose your client platform:",
+    platforms: {
+      universal: "Universal",
+      ios: "iOS",
+      android: "Android",
+      mac: "macOS",
+      win: "Windows"
+    }
   },
   ru: {
-    welcome: "Добро пожаловать в Simple PasarBot.\n1) /trial - получить триал\n2) /cabinet - статус подписки\n3) /buy - создать оплату\n4) /lang ru|en - сменить язык",
+    welcome: "Добро пожаловать в Simple PasarBot.\n1) /trial - получить триал\n2) /cabinet - статус подписки\n3) /buy - создать оплату\n4) /instructions - выбрать инструкцию\n5) /lang ru|en - сменить язык",
     languageChanged: "Язык переключен на русский.",
     langHelp: "Используй /lang ru или /lang en",
     paymentCreated: "Платеж создан:",
@@ -29,7 +37,15 @@ const dict = {
     apiError: "Ошибка запроса, попробуйте чуть позже.",
     statusLabel: "Статус",
     planLabel: "Тариф",
-    expiresLabel: "Истекает"
+    expiresLabel: "Истекает",
+    choosePlatform: "Выберите платформу клиента:",
+    platforms: {
+      universal: "Универсально",
+      ios: "iOS",
+      android: "Android",
+      mac: "macOS",
+      win: "Windows"
+    }
   }
 };
 

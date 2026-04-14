@@ -11,6 +11,7 @@ if (!token || token === "change_me") {
 }
 
 const bot = new TelegramBot(token, { polling: true });
+const instructionPlatforms = ["universal", "ios", "android", "mac", "win"];
 
 function langForMessage(msg) {
   const id = String(msg.from.id);
@@ -55,6 +56,25 @@ async function sendInstruction(chatId, lang, payload) {
   }
 }
 
+function instructionKeyboard(lang) {
+  const labels = t(lang, "platforms");
+  return {
+    inline_keyboard: instructionPlatforms.map((platform) => [
+      {
+        text: labels[platform],
+        callback_data: `instruction:${platform}`
+      }
+    ])
+  };
+}
+
+async function sendInstructionByPlatform(chatId, telegramId, languageCode, platform) {
+  const lang = normalizeLang(languageCode);
+  const response = await fetch(`${apiBase}/cabinet/${telegramId}?lang=${lang}&platform=${platform}`);
+  const payload = await response.json();
+  await sendInstruction(chatId, lang, payload);
+}
+
 bot.onText(/\/start/, async (msg) => {
   const lang = langForMessage(msg);
   await saveLanguage(msg.from.id, lang);
@@ -79,7 +99,13 @@ bot.onText(/\/trial/, async (msg) => {
     const response = await fetch(`${apiBase}/trial/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telegramId: msg.from.id, channelMember: true, nodeTemplate: "no-whitelist", lang })
+      body: JSON.stringify({
+        telegramId: msg.from.id,
+        channelMember: true,
+        nodeTemplate: "no-whitelist",
+        lang,
+        platform: "universal"
+      })
     });
     const payload = await response.json();
     await bot.sendMessage(msg.chat.id, payload?.message || t(lang, "trialCreated"));
@@ -92,7 +118,7 @@ bot.onText(/\/trial/, async (msg) => {
 bot.onText(/\/cabinet/, async (msg) => {
   const lang = langForMessage(msg);
   try {
-    const response = await fetch(`${apiBase}/cabinet/${msg.from.id}?lang=${lang}`);
+    const response = await fetch(`${apiBase}/cabinet/${msg.from.id}?lang=${lang}&platform=universal`);
     const payload = await response.json();
     const summary = [
       t(lang, "cabinetTitle"),
@@ -104,6 +130,28 @@ bot.onText(/\/cabinet/, async (msg) => {
     await sendInstruction(msg.chat.id, lang, payload);
   } catch (_error) {
     await bot.sendMessage(msg.chat.id, t(lang, "apiError"));
+  }
+});
+
+bot.onText(/\/instructions/, async (msg) => {
+  const lang = langForMessage(msg);
+  await bot.sendMessage(msg.chat.id, t(lang, "choosePlatform"), {
+    reply_markup: instructionKeyboard(lang)
+  });
+});
+
+bot.on("callback_query", async (query) => {
+  const data = query.data || "";
+  if (!data.startsWith("instruction:")) {
+    return;
+  }
+  const platform = data.split(":")[1] || "universal";
+  try {
+    await sendInstructionByPlatform(query.message.chat.id, query.from.id, query.from.language_code, platform);
+  } catch (_error) {
+    await bot.sendMessage(query.message.chat.id, t(normalizeLang(query.from.language_code), "apiError"));
+  } finally {
+    await bot.answerCallbackQuery(query.id);
   }
 });
 

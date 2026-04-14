@@ -67,6 +67,25 @@ export async function getPlan(planId) {
   return result.rows[0] || null;
 }
 
+export async function upsertPlan({ id, name, days, trafficLimitBytes, isTrial }) {
+  const result = await pool.query(
+    `INSERT INTO plans (id, name, days, traffic_limit_bytes, is_trial)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      days = EXCLUDED.days,
+      traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
+      is_trial = EXCLUDED.is_trial
+     RETURNING id, name, days, traffic_limit_bytes AS "trafficLimitBytes", is_trial AS "isTrial"`,
+    [id, name, Number(days), trafficLimitBytes ? Number(trafficLimitBytes) : null, Boolean(isTrial)]
+  );
+  return result.rows[0];
+}
+
+export async function deletePlan(planId) {
+  await pool.query("DELETE FROM plans WHERE id = $1", [planId]);
+}
+
 export async function upsertSubscription(subscription) {
   const id = subscription.id || randomUUID();
   const result = await pool.query(
@@ -126,48 +145,56 @@ export async function listSubscriptions() {
   return result.rows;
 }
 
-export async function listInstructions(code) {
+export async function listInstructions(code, lang, platform) {
   const result = code
     ? await pool.query(
-        `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
-         FROM instructions WHERE code = $1 ORDER BY lang ASC`,
-        [code]
+        `SELECT id, code, lang, platform, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM instructions
+         WHERE code = $1
+           AND ($2::text IS NULL OR lang = $2)
+           AND ($3::text IS NULL OR platform = $3)
+         ORDER BY lang ASC, platform ASC`,
+        [code, lang || null, platform || null]
       )
     : await pool.query(
-        `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
-         FROM instructions ORDER BY code ASC, lang ASC`
+        `SELECT id, code, lang, platform, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM instructions
+         WHERE ($1::text IS NULL OR lang = $1)
+           AND ($2::text IS NULL OR platform = $2)
+         ORDER BY code ASC, lang ASC, platform ASC`,
+        [lang || null, platform || null]
       );
   return result.rows;
 }
 
-export async function getInstruction(code, lang) {
+export async function getInstruction(code, lang, platform = "universal") {
   const direct = await pool.query(
-    `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
-     FROM instructions WHERE code = $1 AND lang = $2`,
-    [code, lang]
+    `SELECT id, code, lang, platform, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM instructions WHERE code = $1 AND lang = $2 AND platform = $3`,
+    [code, lang, platform]
   );
   if (direct.rowCount) {
     return direct.rows[0];
   }
   const fallback = await pool.query(
-    `SELECT id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
-     FROM instructions WHERE code = $1 AND lang = 'en'`,
-    [code]
+    `SELECT id, code, lang, platform, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM instructions WHERE code = $1 AND lang = 'en' AND platform = $2`,
+    [code, platform]
   );
   return fallback.rows[0] || null;
 }
 
-export async function upsertInstruction({ code, lang, title, body, imageUrl }) {
+export async function upsertInstruction({ code, lang, platform, title, body, imageUrl }) {
   const result = await pool.query(
-    `INSERT INTO instructions (id, code, lang, title, body, image_url)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (code, lang) DO UPDATE SET
+    `INSERT INTO instructions (id, code, lang, platform, title, body, image_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (code, lang, platform) DO UPDATE SET
       title = EXCLUDED.title,
       body = EXCLUDED.body,
       image_url = EXCLUDED.image_url,
       updated_at = NOW()
-     RETURNING id, code, lang, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"`,
-    [randomUUID(), code, lang, title, body, imageUrl || null]
+     RETURNING id, code, lang, platform, title, body, image_url AS "imageUrl", created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [randomUUID(), code, lang, platform || "universal", title, body, imageUrl || null]
   );
   return result.rows[0];
 }

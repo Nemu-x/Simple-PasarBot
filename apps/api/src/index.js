@@ -1,6 +1,7 @@
 import express from "express";
 import QRCode from "qrcode";
 import {
+  deletePlan,
   getOrCreateUser,
   getInstruction,
   getPlan,
@@ -11,6 +12,7 @@ import {
   listSubscriptions,
   markUserTrialUsed,
   setUserPreferredLanguage,
+  upsertPlan,
   upsertInstruction,
   upsertSubscription
 } from "@simple-pasarbot/db";
@@ -25,16 +27,17 @@ const cfg = {
   port: Number(process.env.API_PORT || 8080),
   pasarguardBaseUrl: process.env.PASARGUARD_BASE_URL || "",
   pasarguardApiKey: process.env.PASARGUARD_API_KEY || "",
-  webhookSecret: process.env.PLATEGA_WEBHOOK_SECRET || "dev-secret",
-  appBaseUrl: process.env.APP_BASE_URL || "http://localhost:8080"
+  webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || process.env.PLATEGA_WEBHOOK_SECRET || "dev-secret",
+  appBaseUrl: process.env.APP_BASE_URL || "http://localhost:8080",
+  paymentProvider: process.env.PAYMENT_PROVIDER_NAME || "Payment"
 };
 
 function buildSubscriptionUrl(subscriptionId) {
   return `${cfg.appBaseUrl.replace(/\/$/, "")}/subscription/${subscriptionId}`;
 }
 
-async function instructionBundle(lang, subscriptionUrl) {
-  const instruction = await getInstruction("connect_vpn", lang);
+async function instructionBundle(lang, subscriptionUrl, platform = "universal") {
+  const instruction = await getInstruction("connect_vpn", lang, platform);
   const qrDataUrl = subscriptionUrl ? await QRCode.toDataURL(subscriptionUrl, { width: 320, margin: 1 }) : null;
   return {
     instruction,
@@ -77,7 +80,7 @@ app.get("/plans", async (_req, res) => {
 
 app.post("/trial/start", async (req, res) => {
   const lang = requestLang(req);
-  const { telegramId, channelMember = true, nodeTemplate = "no-whitelist" } = req.body;
+  const { telegramId, channelMember = true, nodeTemplate = "no-whitelist", platform = "universal" } = req.body;
   if (!telegramId) {
     return res.status(400).json({ error: t(lang, "telegramRequired") });
   }
@@ -120,7 +123,7 @@ app.post("/trial/start", async (req, res) => {
     }).catch(() => undefined);
   }
 
-  const bundle = await instructionBundle(lang, saved.subscriptionUrl);
+  const bundle = await instructionBundle(lang, saved.subscriptionUrl, String(platform));
   return res.json({
     message: t(lang, "trialStarted"),
     subscription: saved,
@@ -132,9 +135,10 @@ app.post("/trial/start", async (req, res) => {
 app.get("/cabinet/:telegramId", async (req, res) => {
   const user = await getOrCreateUser(req.params.telegramId);
   const lang = requestLang(req, user.preferredLanguage || "en");
+  const platform = req.query.platform ? String(req.query.platform) : "universal";
   const subscription = await getSubscriptionByUserId(user.id);
   const status = subscription ? evaluateSubscription(subscription) : "no_subscription";
-  const bundle = await instructionBundle(lang, subscription?.subscriptionUrl || null);
+  const bundle = await instructionBundle(lang, subscription?.subscriptionUrl || null, platform);
   res.json({
     message: t(lang, "cabinetLoaded"),
     user,
@@ -167,7 +171,7 @@ app.post("/payments/create", (req, res) => {
     amount,
     callbackUrl: `${cfg.appBaseUrl}/payments/webhook`
   });
-  res.json({ message: t(lang, "paymentPrepared"), payment: payload });
+  res.json({ message: t(lang, "paymentPrepared"), provider: cfg.paymentProvider, payment: payload });
 });
 
 app.get("/admin/subscriptions", async (_req, res) => {
@@ -176,13 +180,17 @@ app.get("/admin/subscriptions", async (_req, res) => {
 
 app.get("/admin/instructions", async (req, res) => {
   const lang = requestLang(req);
-  const data = await listInstructions(req.query.code ? String(req.query.code) : undefined);
+  const data = await listInstructions(
+    req.query.code ? String(req.query.code) : undefined,
+    req.query.locale ? normalizeLang(req.query.locale) : undefined,
+    req.query.platform ? String(req.query.platform) : undefined
+  );
   res.json({ message: t(lang, "cabinetLoaded"), data });
 });
 
 app.post("/admin/instructions", async (req, res) => {
   const lang = requestLang(req);
-  const { code, locale, title, body, imageUrl } = req.body;
+  const { code, locale, platform, title, body, imageUrl } = req.body;
   if (!code) {
     return res.status(400).json({ error: t(lang, "codeRequired") });
   }
@@ -195,11 +203,34 @@ app.post("/admin/instructions", async (req, res) => {
   const saved = await upsertInstruction({
     code: String(code),
     lang: normalizeLang(locale || lang),
+    platform: platform ? String(platform) : "universal",
     title: String(title),
     body: String(body),
     imageUrl: imageUrl ? String(imageUrl) : null
   });
   return res.json({ message: t(lang, "instructionSaved"), instruction: saved });
+});
+
+app.post("/admin/plans", async (req, res) => {
+  const lang = requestLang(req);
+  const { id, name, days, trafficLimitBytes, isTrial = false } = req.body;
+  if (!id || !name || !days) {
+    return res.status(400).json({ error: "id, name, days are required" });
+  }
+  const plan = await upsertPlan({
+    id: String(id),
+    name: String(name),
+    days: Number(days),
+    trafficLimitBytes: trafficLimitBytes == null ? null : Number(trafficLimitBytes),
+    isTrial: Boolean(isTrial)
+  });
+  return res.json({ message: t(lang, "planSaved"), plan });
+});
+
+app.delete("/admin/plans/:id", async (req, res) => {
+  const lang = requestLang(req);
+  await deletePlan(req.params.id);
+  return res.json({ message: t(lang, "planDeleted") });
 });
 
 app.get("/admin/pasarguard/info", async (_req, res) => {

@@ -38,8 +38,8 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 - Payment request creation and webhook verification flow.
 - Subscription blocking for expired/traffic-overlimit.
 - PasarGuard user sync and info endpoint hooks.
-- Telegram bot commands: `/start`, `/trial`, `/cabinet`, `/buy`, `/lang`.
-- User receives subscription URL + configurable instruction + QR code.
+- Telegram bot commands: `/start`, `/trial`, `/cabinet`, `/buy`, `/lang`, `/instructions`.
+- User receives subscription URL + configurable instruction per platform + QR code.
 
 ## Core endpoints
 
@@ -53,4 +53,6 @@ PostgreSQL migrations are applied automatically by API container startup (`npm r
 - `POST /admin/subscriptions/reconcile`
 - `GET /admin/instructions`
 - `POST /admin/instructions`
+- `POST /admin/plans`
+- `DELETE /admin/plans/:id`
 - `GET /admin/pasarguard/info`
