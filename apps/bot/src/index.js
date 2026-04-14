@@ -120,6 +120,10 @@ async function handleTrial(msg) {
       })
     });
     const payload = await response.json();
+    if (!response.ok) {
+      await bot.sendMessage(msg.chat.id, payload?.error || t(lang, "apiError"));
+      return;
+    }
     await bot.sendMessage(msg.chat.id, payload?.message || t(lang, "trialCreated"));
     await sendInstruction(msg.chat.id, lang, payload);
   } catch (_error) {

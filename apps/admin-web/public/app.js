@@ -1,6 +1,7 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 let pasarTemplates = [];
+let pasarSettings = {};
 
 async function getJson(path) {
   const r = await fetch(`api/proxy/${path}`);
@@ -53,15 +54,12 @@ async function refreshPasarSettings() {
   const out = await getJson("admin/pasarguard/settings");
   const form = $("#pasar-form");
   const data = out?.data || {};
+  pasarSettings = data;
   [
     "panelUrl",
-    "nodeApiBaseUrl",
     "subscriptionUrlPattern",
     "username",
-    "wlTemplateUser",
-    "noWlTemplateUser",
-    "wlInbounds",
-    "noWlInbounds"
+    "password"
   ].forEach((key) => {
     if (form.elements[key]) {
       form.elements[key].value = data[key] || "";
@@ -83,6 +81,14 @@ async function refreshPasarTemplates() {
       option.textContent = `${t.name} (#${t.id})`;
       select.appendChild(option);
     });
+    const savedName = name === "wlTemplateName"
+      ? pasarSettings.wlTemplateName
+      : name === "noWlTemplateName"
+        ? pasarSettings.noWlTemplateName
+        : pasarSettings.trialTemplateName;
+    if (savedName) {
+      select.value = savedName;
+    }
   });
   $("#pasar-templates-out").textContent = JSON.stringify(out, null, 2);
 }
@@ -90,8 +96,8 @@ $("#refresh-pasar-templates").onclick = refreshPasarTemplates;
 
 async function refreshPasarStatus() {
   const badge = $("#pasar-status");
-  const out = await getJson("admin/pasarguard/info");
-  const ok = Boolean(out?.info);
+  const out = await getJson("admin/pasarguard/panel_status");
+  const ok = Boolean(out?.connected);
   badge.textContent = ok ? "Connected" : "Disconnected";
   badge.classList.toggle("status-green", ok);
   badge.classList.toggle("status-red", !ok);
@@ -178,7 +184,6 @@ Promise.all([
   refreshInstructions(),
   refreshUsers(),
   refreshSubs(),
-  refreshPasarSettings(),
-  refreshPasarTemplates(),
+  refreshPasarSettings().then(() => refreshPasarTemplates()),
   refreshPasarStatus()
 ]);

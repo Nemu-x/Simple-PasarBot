@@ -394,6 +394,20 @@ app.get("/admin/pasarguard/templates", async (_req, res) => {
   return res.json({ templates, users: usersSimple?.users || [] });
 });
 
+app.get("/admin/pasarguard/panel_status", async (_req, res) => {
+  const cfgRuntime = await getPasarRuntimeConfig();
+  if (!cfgRuntime.panelUrl || !cfgRuntime.username || !cfgRuntime.password) {
+    return res.json({ connected: false, reason: "missing_credentials" });
+  }
+  try {
+    const token = await fetchAdminToken(cfgRuntime.panelUrl, cfgRuntime.username, cfgRuntime.password);
+    const templates = await getUserTemplates(cfgRuntime.panelUrl, token);
+    return res.json({ connected: true, templatesCount: (templates || []).length });
+  } catch (error) {
+    return res.json({ connected: false, reason: error.message });
+  }
+});
+
 app.post("/admin/pasarguard/connect", async (req, res) => {
   const lang = requestLang(req);
   const {
