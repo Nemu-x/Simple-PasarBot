@@ -9,6 +9,9 @@ import {
   createAuditLog,
   createPaymentEvent,
   deletePlan,
+  deleteCampaign,
+  deleteInstructionById,
+  deletePromoCode,
   deleteSubscriptionByUserId,
   getOrCreateUser,
   getInstruction,
@@ -909,6 +912,12 @@ app.post("/admin/promos", async (req, res) => {
   res.json({ promo: saved });
 });
 
+app.delete("/admin/promos/:code", async (req, res) => {
+  await deletePromoCode(String(req.params.code));
+  await createAuditLog({ actor: "admin", action: "promo.delete", target: `promo:${req.params.code}` });
+  res.json({ ok: true });
+});
+
 app.get("/admin/campaigns", async (_req, res) => {
   res.json({ data: await listCampaigns() });
 });
@@ -919,6 +928,12 @@ app.post("/admin/campaigns", async (req, res) => {
   res.json({ campaign: saved });
 });
 
+app.delete("/admin/campaigns/:id", async (req, res) => {
+  await deleteCampaign(String(req.params.id));
+  await createAuditLog({ actor: "admin", action: "campaign.delete", target: `campaign:${req.params.id}` });
+  res.json({ ok: true });
+});
+
 app.post("/admin/broadcasts", async (req, res) => {
   const job = await createBroadcastJob({
     campaignId: req.body?.campaignId || null,
@@ -926,6 +941,12 @@ app.post("/admin/broadcasts", async (req, res) => {
     payload: req.body?.payload || {}
   });
   res.json({ job });
+});
+
+app.delete("/admin/instructions/:id", async (req, res) => {
+  await deleteInstructionById(String(req.params.id));
+  await createAuditLog({ actor: "admin", action: "instruction.delete", target: `instruction:${req.params.id}` });
+  res.json({ ok: true });
 });
 
 app.get("/admin/broadcasts", async (req, res) => {

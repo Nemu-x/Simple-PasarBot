@@ -457,6 +457,10 @@ export async function upsertPromoCode(promo) {
   return result.rows[0];
 }
 
+export async function deletePromoCode(code) {
+  await pool.query("DELETE FROM promo_codes WHERE code = $1", [code]);
+}
+
 export async function listCampaigns() {
   const result = await pool.query(
     `SELECT id, name, channel, payload_json AS "payload", active, created_at AS "createdAt"
@@ -479,6 +483,14 @@ export async function upsertCampaign(campaign) {
     [campaign.id || randomUUID(), campaign.name, campaign.channel || "telegram", JSON.stringify(campaign.payload || {}), Boolean(campaign.active ?? true)]
   );
   return result.rows[0];
+}
+
+export async function deleteCampaign(campaignId) {
+  await pool.query("DELETE FROM campaigns WHERE id = $1", [campaignId]);
+}
+
+export async function deleteInstructionById(id) {
+  await pool.query("DELETE FROM instructions WHERE id = $1", [id]);
 }
 
 export async function createBroadcastJob(job) {
