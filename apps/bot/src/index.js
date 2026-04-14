@@ -80,6 +80,8 @@ function mainKeyboard(lang) {
     keyboard: [
       [t(lang, "menuTrial"), t(lang, "menuCabinet")],
       [t(lang, "menuBuy"), t(lang, "menuInstructions")],
+      [t(lang, "menuWallet"), t(lang, "menuPromo")],
+      [t(lang, "menuReferral"), t(lang, "menuSupport")],
       [t(lang, "menuLanguage")]
     ],
     resize_keyboard: true
@@ -93,6 +95,10 @@ function resolveActionFromText(text, lang) {
   if (value === t(lang, "menuBuy")) return "buy";
   if (value === t(lang, "menuInstructions")) return "instructions";
   if (value === t(lang, "menuLanguage")) return "language";
+  if (value === t(lang, "menuWallet")) return "wallet";
+  if (value === t(lang, "menuPromo")) return "promo";
+  if (value === t(lang, "menuReferral")) return "referral";
+  if (value === t(lang, "menuSupport")) return "support";
   return null;
 }
 
@@ -167,6 +173,23 @@ async function handleInstructions(msg) {
   });
 }
 
+async function handleWallet(msg) {
+  const lang = langForMessage(msg);
+  const response = await fetch(`${apiBase}/wallet/${msg.from.id}`);
+  const payload = await response.json().catch(() => ({}));
+  await bot.sendMessage(msg.chat.id, `${t(lang, "menuWallet")}: ${(payload.balanceMinor || 0) / 100} ${payload.currency || "RUB"}`);
+}
+
+async function handleReferral(msg) {
+  const lang = langForMessage(msg);
+  await bot.sendMessage(msg.chat.id, `${t(lang, "menuReferral")}: https://t.me/${(await bot.getMe()).username}?start=ref_${msg.from.id}`);
+}
+
+async function handlePromo(msg) {
+  const lang = langForMessage(msg);
+  await bot.sendMessage(msg.chat.id, `${t(lang, "menuPromo")}: отправь код в формате /promo CODE`);
+}
+
 bot.onText(/\/start/, async (msg) => {
   const detected = detectLang(msg);
   const telegramId = String(msg.from.id);
@@ -222,6 +245,14 @@ bot.on("message", async (msg) => {
     await handleBuy(msg);
   } else if (action === "instructions") {
     await handleInstructions(msg);
+  } else if (action === "wallet") {
+    await handleWallet(msg);
+  } else if (action === "promo") {
+    await handlePromo(msg);
+  } else if (action === "referral") {
+    await handleReferral(msg);
+  } else if (action === "support") {
+    await bot.sendMessage(msg.chat.id, `${t(lang, "menuSupport")}: @support`);
   } else if (action === "language") {
     await bot.sendMessage(msg.chat.id, t(lang, "chooseLanguage"), { reply_markup: languageKeyboard() });
   }
@@ -253,4 +284,20 @@ bot.on("callback_query", async (query) => {
 
 bot.onText(/\/buy/, async (msg) => {
   await handleBuy(msg);
+});
+
+bot.onText(/\/promo(?:\s+(\S+))?/, async (msg, match) => {
+  const code = match?.[1];
+  const lang = langForMessage(msg);
+  if (!code) {
+    await bot.sendMessage(msg.chat.id, `${t(lang, "menuPromo")}: /promo CODE`);
+    return;
+  }
+  const payload = await fetch(`${apiBase}/orders/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ telegramId: String(msg.from.id), profileId: "m1", promoCode: code })
+  }).then((r) => r.json())
+    .catch(() => ({}));
+  await bot.sendMessage(msg.chat.id, `${t(lang, "menuPromo")}: ${payload.appliedPromo ? "applied" : "invalid"}`);
 });

@@ -20,6 +20,10 @@ const dict = {
     menuBuy: "Buy",
     menuInstructions: "Instructions",
     menuLanguage: "Language",
+    menuWallet: "Wallet",
+    menuReferral: "Referral",
+    menuPromo: "Promo",
+    menuSupport: "Support",
     chooseLanguage: "Choose language:",
     autoLanguageNotice: "Using your Telegram language by default. You can change it anytime.",
     platforms: {
@@ -52,6 +56,10 @@ const dict = {
     menuInstructions: "Инструкции",
     menuLanguage: "Язык",
     chooseLanguage: "Выберите язык:",
+    menuWallet: "Кошелек",
+    menuReferral: "Рефералка",
+    menuPromo: "Промокод",
+    menuSupport: "Поддержка",
     autoLanguageNotice: "По умолчанию использую язык Telegram. Можно сменить в любой момент.",
     platforms: {
       universal: "Универсально",
