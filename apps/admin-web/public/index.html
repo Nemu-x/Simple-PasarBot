@@ -16,9 +16,11 @@
     <button data-tab="dashboard" class="active">Dashboard</button>
     <button data-tab="pasarguard">PasarGuard</button>
     <button data-tab="plans">Plans</button>
+    <button data-tab="profiles">Profiles</button>
     <button data-tab="instructions">Instructions</button>
     <button data-tab="users">Users</button>
     <button data-tab="subscriptions">Subscriptions</button>
+    <button data-tab="audit">Audit</button>
   </nav>
 
   <main>
@@ -78,6 +80,26 @@
       <table id="instr-table"><thead><tr><th>Code</th><th>Lang</th><th>Platform</th><th>Title</th><th>Body</th></tr></thead><tbody></tbody></table>
     </section>
 
+    <section id="tab-profiles" class="tab">
+      <h2>Subscription Profiles</h2>
+      <form id="profile-form" class="form-grid">
+        <label>ID<input name="id" placeholder="trial/m1/m3/m6/m9/m12"></label>
+        <label>Name<input name="name"></label>
+        <label>Duration Days<input name="durationDays" type="number"></label>
+        <label>Price (minor)<input name="priceMinor" type="number"></label>
+        <label>Currency<input name="currency" value="RUB"></label>
+        <label>Traffic Limit Bytes<input name="trafficLimitBytes" type="number"></label>
+        <label>Node Template<select name="nodeTemplate"><option>no-whitelist</option><option>whitelist</option></select></label>
+        <label>Pasar Template ID<input name="pasarTemplateId" type="number"></label>
+        <label>Require Channel<select name="requireChannelMember"><option value="true">true</option><option value="false">false</option></select></label>
+        <label>Is Trial<select name="isTrial"><option value="false">false</option><option value="true">true</option></select></label>
+        <label>Active<select name="active"><option value="true">true</option><option value="false">false</option></select></label>
+        <button type="submit">Save Profile</button>
+      </form>
+      <button id="refresh-profiles">Refresh Profiles</button>
+      <table id="profiles-table"><thead><tr><th>ID</th><th>Name</th><th>Days</th><th>Price</th><th>Template</th><th>Trial</th><th>Channel</th><th>Active</th></tr></thead><tbody></tbody></table>
+    </section>
+
     <section id="tab-users" class="tab">
       <h2>Users</h2>
       <button id="refresh-users">Refresh Users</button>
@@ -88,6 +110,12 @@
       <h2>Subscriptions</h2>
       <button id="refresh-subs">Refresh Subscriptions</button>
       <table id="subs-table"><thead><tr><th>User</th><th>Plan</th><th>Status</th><th>Expires</th><th>URL</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="tab-audit" class="tab">
+      <h2>Audit Log</h2>
+      <button id="refresh-audit">Refresh Audit</button>
+      <table id="audit-table"><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody></tbody></table>
     </section>
   </main>
 
