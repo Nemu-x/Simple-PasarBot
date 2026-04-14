@@ -4,11 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node src/server.js",
-    "build": "node -e \"console.log('miniapp build ok')\"",
+    "dev": "npm run build:ui && node src/server.js",
+    "build": "npm run build:ui && node -e \"console.log('miniapp build ok')\"",
+    "build:ui": "vite build --config vite.config.js",
     "lint": "node -e \"console.log('miniapp lint ok')\""
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.10"
   }
 }
