@@ -1,0 +1,18 @@
+{
+  "name": "@simple-pasarbot/api",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node src/index.js",
+    "build": "node -e \"console.log('api build ok')\"",
+    "lint": "node -e \"console.log('api lint ok')\""
+  },
+  "dependencies": {
+    "@simple-pasarbot/db": "0.1.0",
+    "@simple-pasarbot/domain": "0.1.0",
+    "@simple-pasarbot/pasarguard": "0.1.0",
+    "@simple-pasarbot/platega": "0.1.0",
+    "express": "^4.21.2"
+  }
+}

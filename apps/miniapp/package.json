@@ -1,0 +1,11 @@
+{
+  "name": "@simple-pasarbot/miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node -e \"console.log('miniapp placeholder')\"",
+    "build": "node -e \"console.log('miniapp build ok')\"",
+    "lint": "node -e \"console.log('miniapp lint ok')\""
+  }
+}

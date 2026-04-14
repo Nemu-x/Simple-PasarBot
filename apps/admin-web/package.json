@@ -1,0 +1,11 @@
+{
+  "name": "@simple-pasarbot/admin-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node -e \"console.log('admin-web placeholder')\"",
+    "build": "node -e \"console.log('admin-web build ok')\"",
+    "lint": "node -e \"console.log('admin-web lint ok')\""
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@simple-pasarbot/bot",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node src/index.js",
+    "build": "node -e \"console.log('bot build ok')\"",
+    "lint": "node -e \"console.log('bot lint ok')\""
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
