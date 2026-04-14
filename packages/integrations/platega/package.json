@@ -1,0 +1,10 @@
+{
+  "name": "@simple-pasarbot/platega",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "node -e \"console.log('platega build ok')\"",
+    "lint": "node -e \"console.log('platega lint ok')\""
+  }
+}
