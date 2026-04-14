@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 const tabs = [
-  ["dashboard", "Dashboard"],
-  ["subscriptions", "Subscriptions"],
-  ["profiles", "Profiles"],
-  ["promos", "Promos"],
-  ["campaigns", "Campaigns"],
+  ["dashboard", "Дашборд"],
+  ["subscriptions", "Подписки"],
+  ["profiles", "Профили"],
+  ["instructions", "Инструкции"],
+  ["promos", "Промокоды"],
+  ["campaigns", "Кампании"],
   ["pasarguard", "PasarGuard"],
-  ["smoke", "Smoke Tests"]
+  ["security", "Безопасность"],
+  ["smoke", "Смок-тесты"]
 ];
 
 async function api(path, options = {}) {
@@ -21,12 +23,16 @@ export function App() {
   const [state, setState] = useState({
     users: 0,
     subs: 0,
-    profiles: 0,
+    profilesCount: 0,
+    profiles: [],
     promos: [],
     campaigns: [],
+    instructions: [],
     subscriptions: [],
     pasarStatus: null,
-    smoke: []
+    smoke: [],
+    settings: {},
+    pasarSettings: {}
   });
 
   useEffect(() => {
@@ -34,23 +40,28 @@ export function App() {
   }, []);
 
   async function refreshAll() {
-    const [users, subs, profiles, promos, campaigns, pasarStatus] = await Promise.all([
+    const [users, subs, profiles, promos, campaigns, instructions, pasarStatus, pasarSettings] = await Promise.all([
       api("admin/users"),
       api("admin/subscriptions"),
       api("admin/profiles"),
       api("admin/promos"),
       api("admin/campaigns"),
-      api("admin/pasarguard/panel_status")
+      api("admin/instructions"),
+      api("admin/pasarguard/panel_status"),
+      api("admin/pasarguard/settings")
     ]);
     setState((s) => ({
       ...s,
       users: users.data?.data?.length || 0,
       subs: subs.data?.data?.length || 0,
-      profiles: profiles.data?.data?.length || 0,
+      profilesCount: profiles.data?.data?.length || 0,
+      profiles: profiles.data?.data || [],
       promos: promos.data?.data || [],
       campaigns: campaigns.data?.data || [],
+      instructions: instructions.data?.data || [],
       subscriptions: subs.data?.data || [],
-      pasarStatus: pasarStatus.data
+      pasarStatus: pasarStatus.data,
+      pasarSettings: pasarSettings.data?.data || {}
     }));
   }
 
@@ -60,10 +71,10 @@ export function App() {
 
   const kpis = useMemo(
     () => [
-      ["Users", state.users],
-      ["Subscriptions", state.subs],
-      ["Profiles", state.profiles],
-      ["Campaigns", state.campaigns.length]
+      ["Пользователи", state.users],
+      ["Подписки", state.subs],
+      ["Профили", state.profilesCount],
+      ["Кампании", state.campaigns.length]
     ],
     [state]
   );
@@ -74,6 +85,7 @@ export function App() {
       ["Users", () => api("admin/users")],
       ["Subscriptions", () => api("admin/subscriptions")],
       ["Profiles", () => api("admin/profiles")],
+      ["Instructions", () => api("admin/instructions")],
       ["Promos", () => api("admin/promos")],
       ["Campaigns", () => api("admin/campaigns")],
       ["Channel Policies", () => api("admin/channel-policies")],
@@ -112,22 +124,92 @@ export function App() {
     await refreshAll();
   }
 
+  async function deleteSubscription(userId) {
+    await api(`admin/subscriptions/${userId}`, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrf }
+    });
+    await refreshAll();
+  }
+
+  async function saveProfile(e) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const body = {
+      id: String(fd.get("id") || "").trim(),
+      name: String(fd.get("name") || "").trim(),
+      durationDays: Number(fd.get("durationDays") || 30),
+      priceMinor: Number(fd.get("priceMinor") || 0),
+      currency: "RUB",
+      trafficLimitBytes: fd.get("trafficLimitBytes") ? Number(fd.get("trafficLimitBytes")) : null,
+      nodeTemplate: fd.get("nodeTemplate") || "no-whitelist",
+      requireChannelMember: fd.get("requireChannelMember") === "true",
+      isTrial: fd.get("isTrial") === "true",
+      active: true
+    };
+    await api("admin/profiles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify(body)
+    });
+    e.currentTarget.reset();
+    await refreshAll();
+  }
+
+  async function saveInstruction(e) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const body = {
+      code: fd.get("code"),
+      locale: fd.get("locale"),
+      platform: fd.get("platform"),
+      title: fd.get("title"),
+      body: fd.get("body")
+    };
+    await api("admin/instructions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify(body)
+    });
+    await refreshAll();
+  }
+
+  async function connectPasar(e) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const body = {
+      panelUrl: fd.get("panelUrl"),
+      nodeApiBaseUrl: fd.get("nodeApiBaseUrl"),
+      username: fd.get("username"),
+      password: fd.get("password"),
+      wlTemplateName: fd.get("wlTemplateName"),
+      noWlTemplateName: fd.get("noWlTemplateName"),
+      trialTemplateName: fd.get("trialTemplateName")
+    };
+    await api("admin/pasarguard/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify(body)
+    });
+    await refreshAll();
+  }
+
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="brand">Simple PasarBot</div>
+        <div className="brand">Nemu-X-PasarBot</div>
         {tabs.map(([id, label]) => (
           <button key={id} className={`tab ${active === id ? "active" : ""}`} onClick={() => setActive(id)}>
             {label}
           </button>
         ))}
-        <a className="logout" href="./logout">Logout</a>
+        <a className="logout" href="./logout">Выход</a>
       </aside>
 
       <main className="content">
         <header className="top">
-          <h1>Control Center</h1>
-          <button className="primary" onClick={() => refreshAll()}>Refresh</button>
+          <h1>Центр управления</h1>
+          <button className="primary" onClick={() => refreshAll()}>Обновить</button>
         </header>
 
         {active === "dashboard" && (
@@ -139,7 +221,7 @@ export function App() {
               </article>
             ))}
             <article className="card wide">
-              <h3>PasarGuard Status</h3>
+              <h3>Статус PasarGuard</h3>
               <pre>{JSON.stringify(state.pasarStatus, null, 2)}</pre>
             </article>
           </section>
@@ -147,12 +229,15 @@ export function App() {
 
         {active === "subscriptions" && (
           <section className="card">
-            <h3>Subscriptions</h3>
+            <h3>Подписки</h3>
             <table>
-              <thead><tr><th>User</th><th>Plan</th><th>Status</th><th>Expires</th></tr></thead>
+              <thead><tr><th>User</th><th>Plan</th><th>Status</th><th>Expires</th><th>Действие</th></tr></thead>
               <tbody>
                 {state.subscriptions.map((s) => (
-                  <tr key={s.id}><td>{s.userId}</td><td>{s.planId}</td><td>{s.status}</td><td>{s.expiresAt}</td></tr>
+                  <tr key={s.id}>
+                    <td>{s.userId}</td><td>{s.planId}</td><td>{s.status}</td><td>{s.expiresAt}</td>
+                    <td><button className="danger" onClick={() => deleteSubscription(s.userId)}>Удалить</button></td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -160,9 +245,45 @@ export function App() {
         )}
 
         {active === "profiles" && (
-          <section className="card">
-            <h3>Profiles</h3>
-            <p>Управление профилями остаётся через API `admin/profiles` (добавим визуальный CRUD в следующем батче).</p>
+          <section className="grid">
+            <article className="card">
+              <h3>Создать/обновить профиль</h3>
+              <form className="form" onSubmit={saveProfile}>
+                <input name="id" placeholder="ID: trial/m1/m3..." required />
+                <input name="name" placeholder="Название" required />
+                <input name="durationDays" type="number" placeholder="Дни" defaultValue={30} />
+                <input name="priceMinor" type="number" placeholder="Цена в копейках" defaultValue={0} />
+                <input name="trafficLimitBytes" type="number" placeholder="Лимит трафика (optional)" />
+                <select name="nodeTemplate"><option value="no-whitelist">no-whitelist</option><option value="whitelist">whitelist</option></select>
+                <select name="requireChannelMember"><option value="true">Требовать канал</option><option value="false">Канал не обязателен</option></select>
+                <select name="isTrial"><option value="false">Платный</option><option value="true">Триал</option></select>
+                <button className="primary" type="submit">Сохранить профиль</button>
+              </form>
+            </article>
+            <article className="card">
+              <h3>Список профилей</h3>
+              <pre>{JSON.stringify(state.profiles, null, 2)}</pre>
+            </article>
+          </section>
+        )}
+
+        {active === "instructions" && (
+          <section className="grid">
+            <article className="card">
+              <h3>Создать инструкцию</h3>
+              <form className="form" onSubmit={saveInstruction}>
+                <input name="code" defaultValue="connect_vpn" required />
+                <select name="locale"><option value="ru">ru</option><option value="en">en</option></select>
+                <select name="platform"><option value="universal">universal</option><option value="ios">ios</option><option value="android">android</option><option value="mac">mac</option><option value="win">win</option></select>
+                <input name="title" placeholder="Заголовок" required />
+                <input name="body" placeholder="Текст" required />
+                <button className="primary" type="submit">Сохранить инструкцию</button>
+              </form>
+            </article>
+            <article className="card">
+              <h3>Инструкции</h3>
+              <pre>{JSON.stringify(state.instructions, null, 2)}</pre>
+            </article>
           </section>
         )}
 
@@ -192,9 +313,37 @@ export function App() {
         )}
 
         {active === "pasarguard" && (
+          <section className="grid">
+            <article className="card">
+              <h3>Подключение к панели PasarGuard</h3>
+              <form className="form" onSubmit={connectPasar}>
+                <input name="panelUrl" placeholder="https://panel.example.com" defaultValue={state.pasarSettings?.panelUrl || ""} />
+                <input name="nodeApiBaseUrl" placeholder="https://node.example.com" defaultValue={state.pasarSettings?.nodeApiBaseUrl || ""} />
+                <input name="username" placeholder="admin username" defaultValue={state.pasarSettings?.username || ""} />
+                <input name="password" type="password" placeholder="admin password" />
+                <input name="wlTemplateName" placeholder="WL template name" defaultValue={state.pasarSettings?.wlTemplateName || ""} />
+                <input name="noWlTemplateName" placeholder="NO-WL template name" defaultValue={state.pasarSettings?.noWlTemplateName || ""} />
+                <input name="trialTemplateName" placeholder="Trial template name" defaultValue={state.pasarSettings?.trialTemplateName || ""} />
+                <button className="primary" type="submit">Сохранить подключение</button>
+              </form>
+            </article>
+            <article className="card">
+              <h3>Статус подключения</h3>
+              <pre>{JSON.stringify(state.pasarStatus, null, 2)}</pre>
+            </article>
+          </section>
+        )}
+
+        {active === "security" && (
           <section className="card">
-            <h3>PasarGuard</h3>
-            <pre>{JSON.stringify(state.pasarStatus, null, 2)}</pre>
+            <h3>Безопасность панели</h3>
+            <ul>
+              <li>Сессии + fingerprint + TTL: включено</li>
+              <li>CSRF для POST/DELETE: включено</li>
+              <li>Rate limit логина: включено</li>
+              <li>Admin API token proxy: {state.pasarStatus ? "включен" : "проверь .env"}</li>
+            </ul>
+            <p>Рекомендуется: длинные значения `ADMIN_SESSION_SECRET` и `ADMIN_API_TOKEN`, плюс HTTPS only.</p>
           </section>
         )}
 
@@ -202,10 +351,10 @@ export function App() {
           <section className="card">
             <div className="row">
               <h3>Smoke Matrix</h3>
-              <button className="primary" onClick={runSmoke}>Run Full Matrix</button>
+              <button className="primary" onClick={runSmoke}>Запустить full matrix</button>
             </div>
             <table>
-              <thead><tr><th>Check</th><th>Status</th><th>HTTP</th></tr></thead>
+              <thead><tr><th>Проверка</th><th>Статус</th><th>HTTP</th></tr></thead>
               <tbody>
                 {state.smoke.map((s) => (
                   <tr key={s.name}>
@@ -216,6 +365,7 @@ export function App() {
                 ))}
               </tbody>
             </table>
+            <p>PASS означает, что endpoint отвечает корректно. Это smoke, не e2e бизнес-валидация.</p>
           </section>
         )}
       </main>

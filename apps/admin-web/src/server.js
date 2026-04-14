@@ -194,7 +194,7 @@ app.get("/login", (_req, res) => {
     pageShell(`
 <div class="card">
 <h1 style="margin:0 0 6px">Admin Login</h1>
-<p style="margin:0 0 14px;color:#9fb1e7">Simple PasarBot Control Panel</p>
+<p style="margin:0 0 14px;color:#9fb1e7">Nemu-X-PasarBot Control Panel</p>
 <form method="post" action="login">
 <label>Username</label><input name="username" />
 <label>Password</label><input name="password" type="password" />
