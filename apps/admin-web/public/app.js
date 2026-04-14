@@ -43,6 +43,18 @@ $("#pasar-form").onsubmit = async (e) => {
   $("#pasar-out").textContent = JSON.stringify(out, null, 2);
 };
 
+async function refreshPasarSettings() {
+  const out = await getJson("admin/pasarguard/settings");
+  const form = $("#pasar-form");
+  const data = out?.data || {};
+  ["panelUrl", "nodeApiBaseUrl", "subscriptionUrlPattern", "username", "wlTemplateUser", "noWlTemplateUser", "wlInbounds", "noWlInbounds"].forEach((key) => {
+    if (form.elements[key]) {
+      form.elements[key].value = data[key] || "";
+    }
+  });
+  $("#pasar-out").textContent = JSON.stringify(out, null, 2);
+}
+
 async function refreshPlans() {
   const out = await getJson("plans");
   const tbody = $("#plans-table tbody");
@@ -113,4 +125,4 @@ async function refreshSubs() {
 }
 $("#refresh-subs").onclick = refreshSubs;
 
-Promise.all([refreshDashboard(), refreshPlans(), refreshInstructions(), refreshUsers(), refreshSubs()]);
+Promise.all([refreshDashboard(), refreshPlans(), refreshInstructions(), refreshUsers(), refreshSubs(), refreshPasarSettings()]);

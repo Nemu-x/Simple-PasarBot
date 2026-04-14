@@ -145,19 +145,29 @@ function authMiddleware(req, res, next) {
 function pageShell(content) {
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Simple PasarBot Admin</title>
-<style>body{font-family:Arial,sans-serif;max-width:1000px;margin:20px auto;padding:0 12px}section{border:1px solid #ddd;border-radius:8px;padding:12px;margin:10px 0}input,textarea,select{width:100%;padding:8px;margin:6px 0}button{padding:8px 12px}pre{background:#f6f6f6;padding:8px;overflow:auto}</style>
+<style>
+body{font-family:Inter,Arial,sans-serif;background:#0b1020;color:#e7ecff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.card{background:#111a34;border:1px solid #2a3a69;border-radius:14px;padding:20px;width:100%;max-width:420px}
+label{display:block;margin:10px 0 6px;color:#b8c7ef}
+input{width:100%;padding:10px;border-radius:8px;border:1px solid #334a88;background:#0d1530;color:#fff}
+button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#3d64de;color:#fff;cursor:pointer}
+a{color:#9cc2ff}
+</style>
 </head><body>${content}</body></html>`;
 }
 
 app.get("/login", (_req, res) => {
   res.send(
     pageShell(`
-<h1>Admin Login</h1>
+<div class="card">
+<h1 style="margin:0 0 6px">Admin Login</h1>
+<p style="margin:0 0 14px;color:#9fb1e7">Simple PasarBot Control Panel</p>
 <form method="post" action="login">
 <label>Username</label><input name="username" />
 <label>Password</label><input name="password" type="password" />
 <button type="submit">Sign in</button>
 </form>
+</div>
 `)
   );
 });

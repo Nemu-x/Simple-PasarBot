@@ -37,9 +37,14 @@
       <form id="pasar-form" class="form-grid">
         <label>Panel URL<input name="panelUrl" placeholder="https://panel.example.com"></label>
         <label>Node API Base URL<input name="nodeApiBaseUrl" placeholder="https://node.example.com:8443"></label>
+        <label>Subscription URL pattern<input name="subscriptionUrlPattern" placeholder="https://space.example.com/sub/{email}"></label>
         <label>Admin username<input name="username"></label>
         <label>Admin password<input name="password" type="password"></label>
         <label>API key (optional)<input name="apiKey"></label>
+        <label>WL template user<input name="wlTemplateUser" placeholder="WL-user"></label>
+        <label>NO-WL template user<input name="noWlTemplateUser" placeholder="NO-WL-user"></label>
+        <label>WL inbounds (comma)<input name="wlInbounds" placeholder="wl-in-1,wl-in-2"></label>
+        <label>NO-WL inbounds (comma)<input name="noWlInbounds" placeholder="nowl-in-1,nowl-in-2"></label>
         <button type="submit">Connect</button>
       </form>
       <pre id="pasar-out"></pre>

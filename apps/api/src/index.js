@@ -41,6 +41,46 @@ function buildSubscriptionUrl(subscriptionId) {
   return `${cfg.appBaseUrl.replace(/\/$/, "")}/subscription/${subscriptionId}`;
 }
 
+function normalizeTemplateKey(value) {
+  const raw = String(value || "").toLowerCase();
+  if (raw === "wl" || raw === "whitelist" || raw === "wl-user") {
+    return "wl";
+  }
+  return "no_wl";
+}
+
+function parseInboundList(value) {
+  if (!value) {
+    return [];
+  }
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function interpolateTemplate(template, params) {
+  let result = String(template || "");
+  for (const [key, value] of Object.entries(params)) {
+    result = result.replaceAll(`{${key}}`, String(value));
+  }
+  return result;
+}
+
+async function getPasarRuntimeConfig() {
+  const saved = await getIntegrationSetting("pasarguard");
+  const data = saved?.value || {};
+  return {
+    nodeApiBaseUrl: data.nodeApiBaseUrl || cfg.pasarguardBaseUrl || "",
+    apiKey: data.apiKey || cfg.pasarguardApiKey || "",
+    wlTemplateUser: data.wlTemplateUser || "",
+    noWlTemplateUser: data.noWlTemplateUser || "",
+    wlInbounds: parseInboundList(data.wlInbounds),
+    noWlInbounds: parseInboundList(data.noWlInbounds),
+    subscriptionUrlPattern: data.subscriptionUrlPattern || ""
+  };
+}
+
 async function instructionBundle(lang, subscriptionUrl, platform = "universal") {
   const instruction = await getInstruction("connect_vpn", lang, platform);
   const qrDataUrl = subscriptionUrl ? await QRCode.toDataURL(subscriptionUrl, { width: 320, margin: 1 }) : null;
@@ -103,6 +143,18 @@ app.post("/trial/start", async (req, res) => {
   }
   const startsAt = new Date();
   const expiresAt = new Date(startsAt.getTime() + trial.days * 24 * 60 * 60 * 1000);
+  const pasarCfg = await getPasarRuntimeConfig();
+  const templateKey = normalizeTemplateKey(nodeTemplate);
+  const templateInbounds = templateKey === "wl" ? pasarCfg.wlInbounds : pasarCfg.noWlInbounds;
+  const generatedEmail = `${user.telegramId}-${templateKey}@pasar.local`;
+  const generatedSubscriptionUrl = pasarCfg.subscriptionUrlPattern
+    ? interpolateTemplate(pasarCfg.subscriptionUrlPattern, {
+        email: generatedEmail,
+        telegramId: user.telegramId,
+        template: templateKey
+      })
+    : buildSubscriptionUrl(`${user.id}-trial`);
+
   const subscription = {
     id: `${user.id}-trial`,
     userId: user.id,
@@ -112,8 +164,8 @@ app.post("/trial/start", async (req, res) => {
     blocked: false,
     trafficUsedBytes: 0,
     trafficLimitBytes: trial.trafficLimitBytes,
-    nodeId: nodeTemplate,
-    subscriptionUrl: buildSubscriptionUrl(`${user.id}-trial`),
+    nodeId: templateKey,
+    subscriptionUrl: generatedSubscriptionUrl,
     startsAt: startsAt.toISOString(),
     expiresAt: expiresAt.toISOString()
   };
@@ -121,10 +173,10 @@ app.post("/trial/start", async (req, res) => {
   await markUserTrialUsed(user.id);
   const saved = await upsertSubscription(subscription);
 
-  if (cfg.pasarguardBaseUrl && cfg.pasarguardApiKey) {
-    await syncUser(cfg.pasarguardBaseUrl, cfg.pasarguardApiKey, {
-      email: `${user.telegramId}@trial.local`,
-      inbounds: [nodeTemplate]
+  if (pasarCfg.nodeApiBaseUrl && pasarCfg.apiKey) {
+    await syncUser(pasarCfg.nodeApiBaseUrl, pasarCfg.apiKey, {
+      email: generatedEmail,
+      inbounds: templateInbounds.length ? templateInbounds : [templateKey]
     }).catch(() => undefined);
   }
 
@@ -248,10 +300,11 @@ app.delete("/admin/plans/:id", async (req, res) => {
 
 app.get("/admin/pasarguard/info", async (_req, res) => {
   const lang = requestLang(_req);
-  if (!cfg.pasarguardBaseUrl || !cfg.pasarguardApiKey) {
+  const pasarCfg = await getPasarRuntimeConfig();
+  if (!pasarCfg.nodeApiBaseUrl || !pasarCfg.apiKey) {
     return res.status(400).json({ error: t(lang, "pasarMissing") });
   }
-  const info = await getBaseInfo(cfg.pasarguardBaseUrl, cfg.pasarguardApiKey);
+  const info = await getBaseInfo(pasarCfg.nodeApiBaseUrl, pasarCfg.apiKey);
   return res.json({ info });
 });
 
@@ -265,9 +318,14 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
   const {
     panelUrl,
     nodeApiBaseUrl,
+    subscriptionUrlPattern,
     username,
     password,
-    apiKey: directApiKey
+    apiKey: directApiKey,
+    wlTemplateUser,
+    noWlTemplateUser,
+    wlInbounds,
+    noWlInbounds
   } = req.body;
 
   let apiKey = directApiKey || "";
@@ -286,8 +344,13 @@ app.post("/admin/pasarguard/connect", async (req, res) => {
   const payload = {
     panelUrl: panelUrl || null,
     nodeApiBaseUrl: nodeApiBaseUrl || null,
+    subscriptionUrlPattern: subscriptionUrlPattern || null,
     username: username || null,
     apiKey: apiKey || null,
+    wlTemplateUser: wlTemplateUser || null,
+    noWlTemplateUser: noWlTemplateUser || null,
+    wlInbounds: wlInbounds || null,
+    noWlInbounds: noWlInbounds || null,
     autoDetected,
     detectedFrom
   };

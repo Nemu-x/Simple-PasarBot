@@ -75,25 +75,26 @@ async function sendInstructionByPlatform(chatId, telegramId, languageCode, platf
   await sendInstruction(chatId, lang, payload);
 }
 
-bot.onText(/\/start/, async (msg) => {
-  const lang = langForMessage(msg);
-  await saveLanguage(msg.from.id, lang);
-  await bot.sendMessage(msg.chat.id, t(lang, "welcome"));
-});
+function mainKeyboard(lang) {
+  return {
+    keyboard: [
+      [t(lang, "menuTrial"), t(lang, "menuCabinet")],
+      [t(lang, "menuBuy"), t(lang, "menuInstructions")]
+    ],
+    resize_keyboard: true
+  };
+}
 
-bot.onText(/\/lang(?:\s+(\w+))?/, async (msg, match) => {
-  const maybeLang = normalizeLang(match?.[1]);
-  if (!match?.[1]) {
-    await bot.sendMessage(msg.chat.id, t(langForMessage(msg), "langHelp"));
-    return;
-  }
-  const telegramId = String(msg.from.id);
-  userLangCache.set(telegramId, maybeLang);
-  await saveLanguage(telegramId, maybeLang);
-  await bot.sendMessage(msg.chat.id, t(maybeLang, "languageChanged"));
-});
+function resolveActionFromText(text, lang) {
+  const value = String(text || "").trim();
+  if (value === t(lang, "menuTrial")) return "trial";
+  if (value === t(lang, "menuCabinet")) return "cabinet";
+  if (value === t(lang, "menuBuy")) return "buy";
+  if (value === t(lang, "menuInstructions")) return "instructions";
+  return null;
+}
 
-bot.onText(/\/trial/, async (msg) => {
+async function handleTrial(msg) {
   const lang = langForMessage(msg);
   try {
     const response = await fetch(`${apiBase}/trial/start`, {
@@ -113,9 +114,9 @@ bot.onText(/\/trial/, async (msg) => {
   } catch (_error) {
     await bot.sendMessage(msg.chat.id, t(lang, "apiError"));
   }
-});
+}
 
-bot.onText(/\/cabinet/, async (msg) => {
+async function handleCabinet(msg) {
   const lang = langForMessage(msg);
   try {
     const response = await fetch(`${apiBase}/cabinet/${msg.from.id}?lang=${lang}&platform=universal`);
@@ -131,13 +132,71 @@ bot.onText(/\/cabinet/, async (msg) => {
   } catch (_error) {
     await bot.sendMessage(msg.chat.id, t(lang, "apiError"));
   }
-});
+}
 
-bot.onText(/\/instructions/, async (msg) => {
+async function handleBuy(msg) {
+  const lang = langForMessage(msg);
+  const response = await fetch(`${apiBase}/payments/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: String(msg.from.id), planId: "monthly", amount: 499, lang })
+  });
+  const payload = await response.json();
+  await bot.sendMessage(msg.chat.id, `${t(lang, "paymentCreated")} ${JSON.stringify(payload.payment)}`);
+}
+
+async function handleInstructions(msg) {
   const lang = langForMessage(msg);
   await bot.sendMessage(msg.chat.id, t(lang, "choosePlatform"), {
     reply_markup: instructionKeyboard(lang)
   });
+}
+
+bot.onText(/\/start/, async (msg) => {
+  const lang = langForMessage(msg);
+  await saveLanguage(msg.from.id, lang);
+  await bot.sendMessage(msg.chat.id, t(lang, "welcome"), { reply_markup: mainKeyboard(lang) });
+});
+
+bot.onText(/\/lang(?:\s+(\w+))?/, async (msg, match) => {
+  const maybeLang = normalizeLang(match?.[1]);
+  if (!match?.[1]) {
+    await bot.sendMessage(msg.chat.id, t(langForMessage(msg), "langHelp"));
+    return;
+  }
+  const telegramId = String(msg.from.id);
+  userLangCache.set(telegramId, maybeLang);
+  await saveLanguage(telegramId, maybeLang);
+  await bot.sendMessage(msg.chat.id, t(maybeLang, "languageChanged"));
+});
+
+bot.onText(/\/trial/, async (msg) => {
+  await handleTrial(msg);
+});
+
+bot.onText(/\/cabinet/, async (msg) => {
+  await handleCabinet(msg);
+});
+
+bot.onText(/\/instructions/, async (msg) => {
+  await handleInstructions(msg);
+});
+
+bot.on("message", async (msg) => {
+  if (!msg.text || msg.text.startsWith("/")) {
+    return;
+  }
+  const lang = langForMessage(msg);
+  const action = resolveActionFromText(msg.text, lang);
+  if (action === "trial") {
+    await handleTrial(msg);
+  } else if (action === "cabinet") {
+    await handleCabinet(msg);
+  } else if (action === "buy") {
+    await handleBuy(msg);
+  } else if (action === "instructions") {
+    await handleInstructions(msg);
+  }
 });
 
 bot.on("callback_query", async (query) => {
@@ -156,12 +215,5 @@ bot.on("callback_query", async (query) => {
 });
 
 bot.onText(/\/buy/, async (msg) => {
-  const lang = langForMessage(msg);
-  const response = await fetch(`${apiBase}/payments/create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: String(msg.from.id), planId: "monthly", amount: 499, lang })
-  });
-  const payload = await response.json();
-  await bot.sendMessage(msg.chat.id, `${t(lang, "paymentCreated")} ${JSON.stringify(payload.payment)}`);
+  await handleBuy(msg);
 });

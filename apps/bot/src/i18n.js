@@ -15,6 +15,10 @@ const dict = {
     planLabel: "Plan",
     expiresLabel: "Expires",
     choosePlatform: "Choose your client platform:",
+    menuTrial: "Start Trial",
+    menuCabinet: "My Cabinet",
+    menuBuy: "Buy",
+    menuInstructions: "Instructions",
     platforms: {
       universal: "Universal",
       ios: "iOS",
@@ -39,6 +43,10 @@ const dict = {
     planLabel: "Тариф",
     expiresLabel: "Истекает",
     choosePlatform: "Выберите платформу клиента:",
+    menuTrial: "Старт триала",
+    menuCabinet: "Мой кабинет",
+    menuBuy: "Купить",
+    menuInstructions: "Инструкции",
     platforms: {
       universal: "Универсально",
       ios: "iOS",
