@@ -168,6 +168,17 @@ async function handleInstructions(msg) {
 }
 
 bot.onText(/\/start/, async (msg) => {
+  const detected = detectLang(msg);
+  const telegramId = String(msg.from.id);
+  userLangCache.set(telegramId, detected);
+  await saveLanguage(telegramId, detected);
+  const lang = langForMessage(msg);
+  await bot.sendMessage(msg.chat.id, t(lang, "autoLanguageNotice"));
+  await bot.sendMessage(msg.chat.id, t(lang, "chooseLanguage"), { reply_markup: languageKeyboard() });
+  await bot.sendMessage(msg.chat.id, t(lang, "welcome"), { reply_markup: mainKeyboard(lang) });
+});
+
+bot.onText(/\/menu/, async (msg) => {
   const lang = langForMessage(msg);
   await saveLanguage(msg.from.id, lang);
   await bot.sendMessage(msg.chat.id, t(lang, "welcome"), { reply_markup: mainKeyboard(lang) });

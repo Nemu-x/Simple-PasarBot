@@ -21,6 +21,7 @@ const dict = {
     menuInstructions: "Instructions",
     menuLanguage: "Language",
     chooseLanguage: "Choose language:",
+    autoLanguageNotice: "Using your Telegram language by default. You can change it anytime.",
     platforms: {
       universal: "Universal",
       ios: "iOS",
@@ -51,6 +52,7 @@ const dict = {
     menuInstructions: "Инструкции",
     menuLanguage: "Язык",
     chooseLanguage: "Выберите язык:",
+    autoLanguageNotice: "По умолчанию использую язык Telegram. Можно сменить в любой момент.",
     platforms: {
       universal: "Универсально",
       ios: "iOS",
